@@ -1,0 +1,201 @@
+.tubeNode {
+  position: relative;
+  min-width: 160px;
+  max-width: 220px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: visible;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+
+.tubeNode:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.selected {
+  box-shadow: 0 0 0 3px #4f46e5, 0 4px 12px rgba(79, 70, 229, 0.3) !important;
+}
+
+.sourceTube {
+  border-color: #4f46e5;
+  background: linear-gradient(135deg, #f0f4ff 0%, #fff 100%);
+}
+
+.intermediateTube {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
+}
+
+.bufferTube {
+  border-color: #0369a1;
+  background: linear-gradient(135deg, #e0f2fe 0%, #fff 100%);
+  min-width: 100px;
+  max-width: 150px;
+}
+
+.sampleTube {
+  border-color: #dc2626;
+  background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+  min-width: 100px;
+  max-width: 150px;
+}
+
+.wasteTube {
+  border-color: #7c3aed;
+  background: linear-gradient(135deg, #f5f3ff 0%, #fff 100%);
+  min-width: 100px;
+  max-width: 150px;
+}
+
+.fillOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(79, 70, 229, 0.1);
+  pointer-events: none;
+  transition: height 0.3s ease;
+}
+
+.content {
+  position: relative;
+  padding: 12px 24px;
+  z-index: 1;
+}
+
+.volume {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.substances {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 6px;
+}
+
+.substance {
+  padding: 2px 0;
+}
+
+.emptySubstances {
+  font-style: italic;
+  color: #94a3b8;
+}
+
+.name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* 连接点样式 - 不覆盖位置 */
+.handle {
+  width: 14px !important;
+  height: 14px !important;
+  background: #4f46e5 !important;
+  border: 3px solid white !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.2s;
+}
+
+.handle:hover {
+  background: #4338ca !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.4), 0 0 0 6px rgba(79, 70, 229, 0.2) !important;
+}
+
+/* 源试管的连接点颜色 */
+.sourceTube .handle {
+  background: #4f46e5 !important;
+}
+
+.intermediateTube .handle {
+  background: #10b981 !important;
+}
+
+.intermediateTube .handle:hover {
+  background: #059669 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.4), 0 0 0 6px rgba(16, 185, 129, 0.2) !important;
+}
+
+.bufferTube .handle {
+  background: #0369a1 !important;
+}
+
+.bufferTube .handle:hover {
+  background: #0284c7 !important;
+  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.4), 0 0 0 6px rgba(3, 105, 161, 0.2) !important;
+}
+
+/* 缓冲液小卡片样式 */
+.bufferNode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+  border: 2px solid #0284c7;
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(3, 105, 161, 0.2);
+  min-width: 60px;
+  max-width: 120px;
+  transition: all 0.2s;
+}
+
+.bufferNode:hover {
+  box-shadow: 0 3px 10px rgba(3, 105, 161, 0.3);
+  transform: translateY(-1px);
+}
+
+.bufferContent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bufferIcon {
+  font-size: 14px;
+}
+
+.bufferName {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+.bufferHandle {
+  width: 10px !important;
+  height: 10px !important;
+  background: #0284c7 !important;
+  border: 2px solid white !important;
+  border-radius: 50% !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: box-shadow 0.2s;
+}
+
+.bufferHandle:hover {
+  background: #0369a1 !important;
+  box-shadow: 0 0 0 2px rgba(3, 105, 161, 0.4), 0 0 0 4px rgba(3, 105, 161, 0.2) !important;
+}
+
+/* 作为原料标签 */
+.asSourceTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 3px;
+  vertical-align: middle;
+}

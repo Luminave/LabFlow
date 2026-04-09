@@ -1,0 +1,876 @@
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.newExperiment {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.experimentNameInput {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  width: 200px;
+}
+
+.experimentNameInput:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.startBtn, .completeBtn, .saveBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--primary-color);
+  color: white;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.startBtn:hover, .completeBtn:hover, .saveBtn:hover {
+  background: var(--primary-hover);
+}
+
+.saveBtn {
+  background: var(--info-color);
+}
+
+.saveBtn:hover {
+  background: #2563eb;
+}
+
+.completeBtn {
+  background: var(--success-color);
+}
+
+.completeBtn:hover {
+  background: #059669;
+}
+
+.experimentInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.experimentName {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.experimentStatus {
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--primary-light);
+  color: var(--primary-color);
+  border-radius: 12px;
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.addTubeBtn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.addTubeBtn:hover {
+  background: var(--bg-color);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.canvas {
+  flex: 1;
+  position: relative;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.emptyIcon {
+  font-size: 64px;
+  margin-bottom: var(--spacing-md);
+}
+
+.helpPanel {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  font-size: 13px;
+  box-shadow: var(--shadow-md);
+}
+
+.helpPanel p {
+  margin-bottom: var(--spacing-xs);
+  font-weight: 500;
+}
+
+.helpPanel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.helpPanel li {
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+/* 模态框 */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modalContent {
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  width: 100%;
+  max-width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modalContent h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.tubeList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.tubeOption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tubeOption:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
+.emptyHint {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: var(--spacing-md);
+}
+
+.closeBtn {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+}
+
+/* 编辑模态框 */
+.editModalContent {
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  width: 100%;
+  max-width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.editModalContent h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+.traceBtn {
+  padding: 6px 12px;
+  background: var(--info-color);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
+.traceBtn:hover {
+  background: #2563eb;
+}
+
+.formGroup {
+  margin-bottom: var(--spacing-md);
+}
+
+.formGroup label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.formGroup input,
+.formGroup select {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  gap: var(--spacing-sm);
+}
+
+.substanceInput {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.substanceInput input:first-child {
+  flex: 2;
+}
+
+.substanceInput input:nth-child(2) {
+  flex: 1;
+}
+
+.substanceInput select {
+  width: 80px;
+}
+
+.removeBtn {
+  padding: 0 8px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.removeBtn:hover {
+  background: #fecaca;
+}
+
+.addSubstanceBtn {
+  font-size: 13px;
+  color: var(--primary-color);
+  padding: var(--spacing-xs) 0;
+  margin-top: var(--spacing-xs);
+}
+
+.addSubstanceBtn:hover {
+  text-decoration: underline;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.cancelBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+}
+
+.cancelBtn:hover {
+  background: var(--bg-color);
+}
+
+.submitBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--primary-color);
+  color: white;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.submitBtn:hover {
+  background: var(--primary-hover);
+}
+
+.calcBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--success-color);
+  color: white;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.calcBtn:hover {
+  background: #059669;
+}
+
+.typeTag {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--bg-color);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  margin-bottom: var(--spacing-md);
+}
+
+.substanceList {
+  background: var(--bg-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+}
+
+.substanceItem {
+  display: grid;
+  grid-template-columns: 1fr 80px 70px 30px;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+  align-items: center;
+}
+
+.substanceItem input,
+.substanceItem select {
+  padding: 6px;
+  font-size: 13px;
+}
+
+.removeSubstanceBtn {
+  padding: 4px;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.bufferSection {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+}
+
+.addBufferBtn {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  border: 1px dashed #0369a1;
+}
+
+.addBufferBtn:hover {
+  background: #bae6fd;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.emptySubstances {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.bufferInfo {
+  background: var(--bg-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm);
+  font-size: 13px;
+}
+
+.bufferInfo p {
+  margin: 4px 0;
+}
+
+/* 工程管理样式 */
+.openBtn, .newBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.openBtn:hover, .newBtn:hover {
+  background: var(--surface-color);
+}
+
+/* 工程列表 */
+.experimentList {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.experimentItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.experimentItem:hover {
+  border-color: var(--primary-color);
+}
+
+.experimentItemInfo h3 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: 16px;
+}
+
+.experimentItemMeta {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.statusTag {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.statusTag.draft {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.statusTag.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.statusTag.reverted {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.experimentItemActions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.experimentItemActions button {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.experimentItemActions .deleteBtn {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* 只读模式 */
+.readOnlyBadge {
+  margin-left: var(--spacing-sm);
+  padding: 2px 8px;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.readOnlyHint {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.readOnlyNotice {
+  padding: var(--spacing-md);
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  text-align: center;
+}
+
+/* 删除试管按钮 */
+.deleteTubeBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.deleteTubeBtn:hover {
+  background: #fecaca;
+}
+
+/* 新建工程按钮 */
+.newBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.newBtn:hover {
+  background: var(--surface-color);
+}
+
+.openBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.openBtn:hover {
+  background: var(--surface-color);
+}
+
+/* 默认缓冲液选择器 */
+.bufferLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bufferSelect {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.bufferSelect:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* 检查按钮 */
+.checkBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkBtn:hover {
+  background: #d97706;
+}
+
+/* 检查结果侧边面板 - 非模态 */
+.checkResultPanel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 380px;
+  max-height: calc(100vh - 100px);
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.panelHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.panelActions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.panelContent {
+  padding: var(--spacing-md);
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(100vh - 200px);
+}
+
+.checkSuccess {
+  text-align: center;
+  padding: var(--spacing-xl);
+  font-size: 16px;
+  color: #10b981;
+  font-weight: 500;
+}
+
+.checkErrors {
+  /* 容器样式 */
+}
+
+.errorList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.errorItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  font-size: 13px;
+}
+
+.errorTube {
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.errorType {
+  font-size: 11px;
+  font-weight: 500;
+  color: #dc2626;
+}
+
+.errorMessage {
+  font-size: 12px;
+  color: #7f1d1d;
+}
+
+.recheckBtn {
+  padding: 6px 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.recheckBtn:hover {
+  background: var(--primary-hover);
+}
+
+.closeResultBtn {
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.closeResultBtn:hover {
+  background: var(--surface-color);
+  color: var(--text-color);
+}
+
+/* 复选框标签 */
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* 实验时间功能 */
+.dateSection {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--surface-color);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.dateInput {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: monospace;
+  text-align: center;
+}
+
+.dateInput:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.quickNamingLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.quickNamingLabel input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* 耗损按钮 */
+.wasteBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.wasteBtn:hover {
+  background: #6d28d9;
+}
+
+/* 耗损标签 */
+.wasteTag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* 新建耗损按钮 */
+.wasteAddBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.wasteAddBtn:hover {
+  background: #6d28d9;
+}
