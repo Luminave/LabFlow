@@ -370,28 +370,11 @@ export default function ExperimentPage() {
       if (change.type === 'position' && change.position && change.dragging === false) {
         updateTubePosition(change.id, change.position.x, change.position.y)
       }
-      // 跟踪选中状态
-      if (change.type === 'select') {
-        if (change.selected) {
-          setSelectedNodes(prev => [...prev, change.id])
-        } else {
-          setSelectedNodes(prev => prev.filter(id => id !== change.id))
-        }
-      }
     })
   }, [onNodesChange, updateTubePosition, isReadOnly])
   
   // 边选中变化
   const handleEdgesChange = useCallback((changes: any[]) => {
-    changes.forEach(change => {
-      if (change.type === 'select') {
-        if (change.selected) {
-          setSelectedEdges(prev => [...prev, change.id])
-        } else {
-          setSelectedEdges(prev => prev.filter(id => id !== change.id))
-        }
-      }
-    })
     onEdgesChange(changes)
   }, [onEdgesChange])
   

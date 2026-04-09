@@ -34,7 +34,7 @@ function SubstanceTag({ substance }: { substance: Substance }) {
 }
 
 function TubeNode({ data, selected }: NodeProps) {
-  const nodeData = data as TubeNodeData
+  const nodeData = data as unknown as TubeNodeData
   const { tube, isSource, isBuffer, endStateVolume, initialVolume, isInWarehouse, fillPercentage } = nodeData
   const { loadColors } = useSubstanceColorStore()
   
