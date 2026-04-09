@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -34,8 +37,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Build with Vite
+        run: npm run build
+      
       - name: Build Electron app
-        run: npm run electron:build
+        run: npx electron-builder
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         

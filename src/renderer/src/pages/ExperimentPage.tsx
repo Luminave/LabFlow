@@ -504,7 +504,7 @@ export default function ExperimentPage() {
       data: { volume: 0, volumeUnit: 'μL' }
     }
     
-    setEdges(eds => addEdge(newEdge, eds))
+    setEdges(eds => addEdge(newEdge, eds) as Edge[])
     
     addConnection({
       fromTubeId: connection.source!,

@@ -22,28 +22,3 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTubeUsage: (tubeId: string) => ipcRenderer.invoke('db:getTubeUsage', tubeId),
   addTubeUsage: (record: any) => ipcRenderer.invoke('db:addTubeUsage', record),
 })
-
-// TypeScript 类型声明
-export interface ElectronAPI {
-  getAppPath: () => Promise<string>
-  
-  getTubes: () => Promise<any[]>
-  getTube: (id: string) => Promise<any>
-  addTube: (tube: any) => Promise<any>
-  updateTube: (tube: any) => Promise<any>
-  deleteTube: (id: string) => Promise<{ success: boolean }>
-  
-  getExperiments: () => Promise<any[]>
-  getExperiment: (id: string) => Promise<any>
-  saveExperiment: (exp: any) => Promise<any>
-  deleteExperiment: (id: string) => Promise<{ success: boolean }>
-  
-  getTubeUsage: (tubeId: string) => Promise<any[]>
-  addTubeUsage: (record: any) => Promise<any>
-}
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI
-  }
-}
