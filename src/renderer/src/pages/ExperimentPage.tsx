@@ -52,6 +52,7 @@ export default function ExperimentPage() {
     updateTubePosition,
     completeExperiment,
     saveCurrentExperiment,
+    saveAsExperiment,
     loadExperiment,
     deleteExperiment,
     fetchExperiments,
@@ -1121,12 +1122,12 @@ export default function ExperimentPage() {
   }
 
   // 另存为
-  const handleSaveAs = () => {
+  const handleSaveAs = async () => {
     if (!saveAsName.trim()) {
       alert('请输入新名称')
       return
     }
-    saveCurrentExperiment(saveAsName)
+    await saveAsExperiment(saveAsName)
     setShowSaveAs(false)
     setSaveAsName('')
     alert('实验已另存为:' + saveAsName)

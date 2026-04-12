@@ -117,6 +117,7 @@ interface ExperimentState {
   
   createNewExperiment: (name: string, description?: string) => void
   saveCurrentExperiment: (name?: string) => void
+  saveAsExperiment: (newName: string) => void
   loadExperiment: (id: string) => void
   deleteExperiment: (id: string) => void
   
@@ -462,6 +463,41 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, currentExperiment: experiment })
     } catch (e) {
       console.error('Failed to save experiment:', e)
+    }
+  },
+
+  saveAsExperiment: async (newName) => {
+    const state = get()
+    if (!state.currentExperiment) return
+    
+    // 创建一个全新 ID 的实验副本
+    const newExperiment: Experiment = {
+      ...state.currentExperiment,
+      id: crypto.randomUUID(),
+      name: newName,
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: undefined,
+      tubes: state.currentTubes,
+      tubePositions: state.tubePositions,
+      connections: state.connections
+    }
+    
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.saveExperiment(experimentToDb(newExperiment))
+      }
+      
+      const experiments = get().experiments
+      const newExperiments = [...experiments, newExperiment]
+      
+      saveExperimentsToStorage(newExperiments)
+      
+      set({ experiments: newExperiments, currentExperiment: newExperiment })
+      saveCurrentExperimentToStorage({ ...state, currentExperiment: newExperiment })
+    } catch (e) {
+      console.error('Failed to save as experiment:', e)
     }
   },
   
@@ -1017,6 +1053,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       status: 'completed',
       completedAt: new Date().toISOString(),
       tubes: currentTubes,
+      tubePositions: get().tubePositions,
       connections,
       initialStateTubes,
       endStateTubes
@@ -1036,7 +1073,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     // 同时保存到 localStorage 作为备份（和 saveCurrentExperiment 一致）
     saveExperimentsToStorage(newExperiments)
     
-    set({ currentExperiment: completedExperiment, currentTubes, tubePositions: [], experiments: newExperiments, showEndState: false })
+    set({ currentExperiment: completedExperiment, currentTubes, tubePositions: get().tubePositions, experiments: newExperiments, showEndState: false })
   },
   
   revertExperiment: async (experimentId) => {
