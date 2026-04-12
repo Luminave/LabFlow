@@ -17,9 +17,9 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-:: Check Git
+:: Check Git - using where command which is safer
 echo [1/5] Checking Git...
-git --version >nul 2>&1
+where git >nul 2>&1
 if %errorLevel% neq 0 (
     echo [WARNING] Git not found!
     echo.
@@ -52,8 +52,8 @@ if %errorLevel% neq 0 (
         :: Clean up
         del "%TEMP%\Git-Installer.exe" 2>nul
         
-        :: Verify installation
-        git --version >nul 2>&1
+        :: Verify installation using where command
+        where git >nul 2>&1
         if %errorLevel% neq 0 (
             echo [ERROR] Git installation failed or not in PATH!
             echo Please restart this script.
@@ -70,10 +70,10 @@ if %errorLevel% neq 0 (
     echo [OK] Git already installed
 )
 
-:: Check Node.js
+:: Check Node.js - using where command
 echo.
 echo [2/5] Checking Node.js...
-node --version >nul 2>&1
+where node >nul 2>&1
 if %errorLevel% neq 0 (
     echo [WARNING] Node.js not found!
     echo.
@@ -106,7 +106,7 @@ if %errorLevel% neq 0 (
         del "%TEMP%\NodeJS-Installer.msi" 2>nul
         
         :: Verify installation
-        node --version >nul 2>&1
+        where node >nul 2>&1
         if %errorLevel% neq 0 (
             echo [ERROR] Node.js installation failed!
             echo Please restart this script.
