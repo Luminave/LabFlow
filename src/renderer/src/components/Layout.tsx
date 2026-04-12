@@ -65,6 +65,14 @@ export default function Layout({ children }: LayoutProps) {
             <span className={styles.navIcon}>🎨</span>
             {t('nav.settings', language)}
           </NavLink>
+          
+          <NavLink 
+            to="/backup" 
+            className={({ isActive }) => isActive ? styles.navItemActive : styles.navItem}
+          >
+            <span className={styles.navIcon}>💾</span>
+            {t('nav.backup', language)}
+          </NavLink>
         </nav>
         
         <div className={styles.sidebarFooter}>

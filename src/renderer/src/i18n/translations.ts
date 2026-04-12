@@ -10,6 +10,7 @@ export const translations: Record<string, Record<Language, string>> = {
   'nav.history': { zh: '实验记录', en: 'History' },
   'nav.trace': { zh: '试管溯源', en: 'Tube Trace' },
   'nav.settings': { zh: '颜色设置', en: 'Color Settings' },
+  'nav.backup': { zh: '数据备份', en: 'Data Backup' },
   
   // 工具栏
   'toolbar.newExperiment': { zh: '新建工程', en: 'New Project' },

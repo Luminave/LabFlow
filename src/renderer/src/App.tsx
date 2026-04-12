@@ -5,6 +5,7 @@ import ExperimentPage from './pages/ExperimentPage'
 import HistoryPage from './pages/HistoryPage'
 import TracePage from './pages/TracePage'
 import SettingsPage from './pages/SettingsPage'
+import BackupPage from './pages/BackupPage'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/trace" element={<TracePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/backup" element={<BackupPage />} />
       </Routes>
     </Layout>
   )

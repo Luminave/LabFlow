@@ -1,0 +1,189 @@
+.container {
+  padding: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 数据概览 */
+.statsSection {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.statsSection h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 16px 0;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.statNumber {
+  font-size: 28px;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.statLabel {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* 操作区域 */
+.actionSection {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.actionCard {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  transition: box-shadow 0.2s;
+}
+
+.actionCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.actionIcon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.actionCard h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+}
+
+.actionDesc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+.primaryBtn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.primaryBtn:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.primaryBtn:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.secondaryBtn {
+  background: white;
+  color: #3b82f6;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.secondaryBtn:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.secondaryBtn:disabled {
+  color: #93c5fd;
+  border-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+/* 说明区域 */
+.noticeSection {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.noticeSection h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 12px 0;
+}
+
+.noticeSection ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.noticeSection li {
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.8;
+}
+
+/* 响应式 */
+@media (max-width: 600px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .actionSection {
+    grid-template-columns: 1fr;
+  }
+}
