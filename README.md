@@ -4,29 +4,22 @@
 
 ## 🚀 快速开始
 
-### Windows 用户
+### Windows 用户（推荐一键安装）
 
-1. **下载项目**
-   ```bash
-   git clone https://github.com/Luminave/LabFlow.git
-   cd LabFlow
-   ```
+1. **下载安装脚本**
+   👉 [点击下载 LabFlow-Installer.bat](https://raw.githubusercontent.com/Luminave/LabFlow/main/LabFlow-Installer.bat)
 
-2. **安装依赖**
-   ```bash
-   npm install
-   ```
+2. **运行安装脚本**
+   - 右键点击下载的 `LabFlow-Installer.bat`
+   - 选择 **"以管理员身份运行"**
+   - 按照提示完成安装
 
-3. **启动应用**
-   - 双击 `启动LabFlow.bat` 文件
-   - 或者在命令行运行：
-     ```bash
-     npm run dev
-     ```
-
-4. **访问界面**
+3. **启动 LabFlow**
+   - 安装完成后，桌面会出现 `Start-LabFlow` 快捷方式
+   - 双击即可启动
    - 浏览器会自动打开 http://localhost:5173/
-   - 如果没有自动打开，请手动访问该地址
+
+> 💡 安装脚本会自动检测并安装 Git 和 Node.js（如需要），然后自动下载项目并配置环境。
 
 ### Linux 用户
 
@@ -88,6 +81,19 @@
 
 ## 开发
 
+### 手动安装（开发者模式）
+
+如果不想使用安装脚本，也可以手动安装：
+
+```bash
+git clone https://github.com/Luminave/LabFlow.git
+cd LabFlow
+npm install
+npm run dev
+```
+
+然后访问 http://localhost:5173/
+
 ### 浏览器访问模式（推荐）
 
 ```bash
@@ -130,7 +136,13 @@ npm run electron:build
 
 ### Windows 用户
 
-**问题：** 双击 `启动LabFlow.bat` 后浏览器没有自动打开
+**问题：** 安装脚本提示需要管理员权限
+**解决：** 右键点击 `LabFlow-Installer.bat`，选择 "以管理员身份运行"
+
+**问题：** 下载 Git/Node.js 很慢
+**解决：** 这是网络问题，耐心等待即可。如果实在很慢，可以手动安装 Git 和 Node.js 后再运行脚本。
+
+**问题：** 双击 `Start-LabFlow.bat` 后浏览器没有自动打开
 **解决：**
 1. 确保已安装 Node.js（推荐 v18 或更高版本）
 2. 手动运行 `npm run dev`
