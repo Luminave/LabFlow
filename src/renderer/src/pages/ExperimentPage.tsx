@@ -371,7 +371,51 @@ export default function ExperimentPage() {
     setShowCheckResult(true)
   }
 
-  // 加载数据
+  // 刷新工程 - 重新计算中间产物，从仓库更新原料试管
+  const handleRefreshExperiment = () => {
+    if (!currentExperiment || isReadOnly) return
+
+    // 先刷新仓库数据
+    fetchTubes()
+
+    const newTubes = currentTubes.map(tube => {
+      // 原料试管：从仓库重新读取当前体积
+      if (tube.type === 'source') {
+        const whTube = warehouseTubes.find(t => t.id === tube.id)
+        if (whTube) {
+          return {
+            ...tube,
+            remainingVolume: whTube.remainingVolume,
+            remainingVolumeUnit: whTube.remainingVolumeUnit,
+            substances: whTube.substances,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      }
+
+      // 中间产物试管：重新计算体积
+      if (tube.type === 'intermediate') {
+        const inVolume = connections
+          .filter(c => c.toTubeId === tube.id)
+          .reduce((sum, c) => sum + c.volume, 0)
+        const outVolume = connections
+          .filter(c => c.fromTubeId === tube.id)
+          .reduce((sum, c) => sum + c.volume, 0)
+        return {
+          ...tube,
+          remainingVolume: inVolume - outVolume,
+          remainingVolumeUnit: tube.totalVolumeUnit,
+          updatedAt: new Date().toISOString()
+        }
+      }
+
+      return tube
+    })
+
+    // 更新实验数据
+    set({ currentTubes: newTubes })
+    alert('工程已刷新！')
+  }
   useEffect(() => {
     fetchExperiments()
     fetchTubes()
@@ -1295,6 +1339,10 @@ export default function ExperimentPage() {
 
                 <button className={styles.checkBtn} onClick={handleCheckExperiment}>
                   🔍 {t('toolbar.check', language)}
+                </button>
+
+                <button className={styles.refreshBtn} onClick={handleRefreshExperiment}>
+                  🔄 {t('toolbar.refresh', language)}
                 </button>
               </>
             )}

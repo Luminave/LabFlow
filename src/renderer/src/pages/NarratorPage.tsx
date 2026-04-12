@@ -138,6 +138,7 @@ export default function NarratorPage() {
       <header className={styles.header}>
         <h1 className={styles.title}>📖 讲述者</h1>
         <p className={styles.subtitle}>选择实验工程，按配置序号生成实验操作步骤</p>
+        <p className={styles.hint}>💡 提示：回退的工程需要另存为新工程之后才能使用讲述者</p>
       </header>
 
       <div className={styles.content}>

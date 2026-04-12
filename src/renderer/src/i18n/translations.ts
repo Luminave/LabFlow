@@ -33,6 +33,7 @@ export const translations: Record<string, Record<Language, string>> = {
   'toolbar.quickNaming': { zh: '快捷命名', en: 'Quick Naming' },
   'toolbar.endExperiment': { zh: '结束实验', en: 'End Experiment' },
   'toolbar.check': { zh: '检查', en: 'Check' },
+  'toolbar.refresh': { zh: '刷新', en: 'Refresh' },
   
   // 试管类型
   'tube.source': { zh: '📦 原料', en: '📦 Source' },
