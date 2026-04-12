@@ -112,26 +112,72 @@ export default function NarratorPage() {
 
     // 按照用户排列的试管顺序生成步骤
     narratorTubes.forEach((narratorTube, stepIndex) => {
-      const stepLines: string[] = []
+      // 找到所有移入这个试管的连接，按体积从大到小排序
+      const incomingConnections = connections
+        .filter(conn => conn.toTubeId === narratorTube.id)
+        .sort((a, b) => b.volume - a.volume) // 大体积优先
 
-      // 找到所有移入这个试管的连接
-      const incomingConnections = connections.filter(
-        conn => conn.toTubeId === narratorTube.id
-      )
+      if (incomingConnections.length === 0) return
 
-      incomingConnections.forEach((conn, lineIndex) => {
+      // 计算总体积和各成分浓度
+      let totalVolume = 0
+      const substanceMap = new Map<string, { name: string; totalAmount: number; unit: string }>()
+
+      incomingConnections.forEach(conn => {
         const sourceTube = tubes.find(t => t.id === conn.fromTubeId)
-        if (sourceTube) {
-          const volumeStr = `${conn.volume} μL`
-          stepLines.push(`(${lineIndex + 1}) ${sourceTube.name}→${volumeStr}→${narratorTube.name}`)
+        if (!sourceTube) return
+
+        totalVolume += conn.volume
+
+        // 累计各成分
+        sourceTube.substances.forEach(sub => {
+          // 移入的量 = 源试管浓度 × 移液体积
+          const amount = sub.concentration * conn.volume
+          const existing = substanceMap.get(sub.name)
+          if (existing) {
+            existing.totalAmount += amount
+          } else {
+            substanceMap.set(sub.name, {
+              name: sub.name,
+              totalAmount: amount,
+              unit: sub.concentrationUnit
+            })
+          }
+        })
+      })
+
+      // 计算最终浓度
+      const substanceInfo: string[] = []
+      substanceMap.forEach(sub => {
+        if (totalVolume > 0) {
+          const finalConcentration = sub.totalAmount / totalVolume
+          // 格式化浓度显示
+          let concStr = ''
+          if (finalConcentration >= 1) {
+            concStr = `${finalConcentration.toFixed(1)}${sub.unit}`
+          } else if (finalConcentration >= 0.001) {
+            concStr = `${(finalConcentration * 1000).toFixed(1)}n${sub.unit.substring(1)}`
+          } else {
+            concStr = `${finalConcentration.toFixed(4)}${sub.unit}`
+          }
+          substanceInfo.push(`${concStr} ${sub.name}`)
         }
       })
 
-      if (stepLines.length > 0) {
-        steps.push(`Step${stepIndex + 1}:`)
-        stepLines.forEach(line => steps.push(line))
-        steps.push('') // 空行分隔
-      }
+      // Step 标题
+      const volumeStr = `${totalVolume}μL`
+      const substancesStr = substanceInfo.length > 0 ? substanceInfo.join(';') : '空'
+      steps.push(`Step${stepIndex + 1}: ${narratorTube.name}   ${volumeStr}   (${substancesStr})`)
+
+      // 小步骤（已按体积从大到小排序）
+      incomingConnections.forEach((conn, lineIndex) => {
+        const sourceTube = tubes.find(t => t.id === conn.fromTubeId)
+        if (sourceTube) {
+          steps.push(`(${lineIndex + 1}) ${sourceTube.name}→${conn.volume} μL→${narratorTube.name}`)
+        }
+      })
+
+      steps.push('') // 空行分隔
     })
 
     setNarratedSteps(steps.join('\n').trim())
