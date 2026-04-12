@@ -193,10 +193,11 @@ echo.
 echo [5/5] Installing dependencies...
 echo This may take a few minutes, please wait...
 cd /d "%INSTALL_PATH%"
+set ELECTRON_SKIP_BINARY_DOWNLOAD=1
 call npm install
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to install dependencies!
-    echo Please manually run: cd "%INSTALL_PATH%" && npm install
+    echo Please manually run: cd "%INSTALL_PATH%" && set ELECTRON_SKIP_BINARY_DOWNLOAD=1 && npm install
     pause
     exit /b 1
 )
