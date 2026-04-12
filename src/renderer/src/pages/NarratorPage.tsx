@@ -22,9 +22,9 @@ export default function NarratorPage() {
     fetchExperiments()
   }, [fetchExperiments])
 
-  // 已完成的实验列表
-  const completedExperiments = useMemo(() =>
-    experiments.filter(e => e.status === 'completed'),
+  // 可用的实验列表（草稿和已完成的都可以选择）
+  const availableExperiments = useMemo(() =>
+    experiments.filter(e => e.status === 'completed' || e.status === 'draft'),
     [experiments]
   )
 
@@ -206,9 +206,9 @@ export default function NarratorPage() {
             onChange={e => setSelectedExperimentId(e.target.value)}
           >
             <option value="">-- 请选择实验 --</option>
-            {completedExperiments.map(exp => (
+            {availableExperiments.map(exp => (
               <option key={exp.id} value={exp.id}>
-                {exp.name} ({exp.completedAt ? new Date(exp.completedAt).toLocaleDateString('zh-CN') : ''})
+                {exp.name} [{exp.status === 'completed' ? '已完成' : '草稿'}] ({exp.completedAt ? new Date(exp.completedAt).toLocaleDateString('zh-CN') : new Date(exp.updatedAt).toLocaleDateString('zh-CN')})
               </option>
             ))}
           </select>
