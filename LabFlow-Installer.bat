@@ -162,17 +162,18 @@ echo Installation path: %INSTALL_PATH%
 echo.
 
 :: Check if directory exists
-if exist "%INSTALL_PATH%" (
-    echo [WARNING] Directory already exists!
-    set /p OVERWRITE="Overwrite? (Y/N): "
-    if /i not "%OVERWRITE%"=="Y" (
-        echo Installation cancelled
-        pause
-        exit /b 0
-    )
-    echo Removing old directory...
-    rmdir /s /q "%INSTALL_PATH%"
-)
+if not exist "%INSTALL_PATH%" goto dir_ok
+echo [WARNING] Directory already exists!
+set /p OVERWRITE="Overwrite? (Y/N): "
+set OVERWRITE=%OVERWRITE: =%
+if /i "%OVERWRITE%"=="Y" goto overwrite_ok
+echo Installation cancelled
+pause
+exit /b 0
+:overwrite_ok
+echo Removing old directory...
+rmdir /s /q "%INSTALL_PATH%"
+:dir_ok
 
 :: Clone project
 echo.
