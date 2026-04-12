@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWarehouseStore } from '../stores/warehouseStore'
 import { useExperimentStore } from '../stores/experimentStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
-import { TubeType, TubeStatus, VolumeUnit, ConcentrationUnit } from '@shared/types'
+import { useGroupStore } from '../stores/groupStore'
+import { TubeType, TubeStatus, VolumeUnit, ConcentrationUnit, TubeGroup } from '@shared/types'
 import styles from './WarehousePage.module.css'
 
 // 成分显示组件（带颜色高亮）
@@ -30,14 +31,63 @@ export default function WarehousePage() {
   const { tubes, addTube, deleteTube, updateTubeStatus, updateTube, fetchTubes, loading } = useWarehouseStore()
   const { currentExperiment, addSourceTube, currentTubes } = useExperimentStore()
   const { loadColors } = useSubstanceColorStore()
+  const { groups, addGroup, updateGroup, loadGroups, generateGroupName } = useGroupStore()
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingTube, setEditingTube] = useState<any>(null)
+  const [editingGroup, setEditingGroup] = useState<TubeGroup | null>(null)
   
   // 加载已保存的试管和颜色配置
   useEffect(() => {
     fetchTubes()
     loadColors()
-  }, [fetchTubes, loadColors])
+    loadGroups()
+  }, [fetchTubes, loadColors, loadGroups])
+  
+  // 按分组整理试管
+  const groupedTubes = useMemo(() => {
+    const grouped: { group: TubeGroup | null; tubes: typeof tubes }[] = []
+    
+    // 先按分组分组
+    const groupMap = new Map<string, typeof tubes>()
+    const ungrouped: typeof tubes = []
+    
+    for (const tube of tubes) {
+      if (tube.groupId) {
+        const existing = groupMap.get(tube.groupId) || []
+        existing.push(tube)
+        groupMap.set(tube.groupId, existing)
+      } else {
+        ungrouped.push(tube)
+      }
+    }
+    
+    // 添加已创建的分组（含试管的）
+    for (const group of groups) {
+      const groupTubes = groupMap.get(group.id)
+      if (groupTubes && groupTubes.length > 0) {
+        grouped.push({ group, tubes: groupTubes })
+        groupMap.delete(group.id)
+      }
+    }
+    
+    // 添加引用了已删除分组的试管
+    for (const [groupId, groupTubes] of groupMap) {
+      grouped.push({ group: null, tubes: groupTubes })
+    }
+    
+    // 添加未分组的试管
+    if (ungrouped.length > 0) {
+      grouped.push({ group: null, tubes: ungrouped })
+    }
+    
+    return grouped
+  }, [tubes, groups])
+  
+  // 新增分组
+  const handleAddGroup = () => {
+    const name = generateGroupName()
+    addGroup(name)
+  }
   
   const handleAddTube = async (data: any) => {
     // 先添加到 store
@@ -97,15 +147,21 @@ export default function WarehousePage() {
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>试剂仓库</h1>
-        <button className={styles.addButton} onClick={() => setShowAddForm(true)}>
-          + 添加试剂
-        </button>
+        <div className={styles.headerButtons}>
+          <button className={styles.addGroupButton} onClick={handleAddGroup}>
+            📁 新增分组
+          </button>
+          <button className={styles.addButton} onClick={() => setShowAddForm(true)}>
+            + 添加试剂
+          </button>
+        </div>
       </header>
       
       {showAddForm && (
         <AddTubeForm 
           onClose={() => setShowAddForm(false)}
           onSubmit={handleAddTube}
+          groups={groups}
         />
       )}
       
@@ -119,16 +175,36 @@ export default function WarehousePage() {
             <p className={styles.emptyHint}>点击上方按钮添加第一个试剂</p>
           </div>
         ) : (
-          tubes.map(tube => (
-            <TubeCard 
-              key={tube.id}
-              tube={tube}
-              onDelete={() => handleDeleteTube(tube.id)}
-              onStatusChange={(status: string) => handleStatusChange(tube.id, status)}
-              onEdit={() => setEditingTube(tube)}
-              onAddToExperiment={() => handleAddToExperiment(tube)}
-              hasExperiment={!!currentExperiment}
-            />
+          groupedTubes.map(({ group, tubes: groupTubes }) => (
+            group ? (
+              <GroupBox
+                key={group.id}
+                group={group}
+                tubes={groupTubes}
+                onEditGroup={() => setEditingGroup(group)}
+                onDeleteTube={handleDeleteTube}
+                onStatusChange={handleStatusChange}
+                onEditTube={setEditingTube}
+                onAddToExperiment={handleAddToExperiment}
+                hasExperiment={!!currentExperiment}
+                groups={groups}
+                onUpdateTube={updateTube}
+              />
+            ) : (
+              groupTubes.map(tube => (
+                <TubeCard 
+                  key={tube.id}
+                  tube={tube}
+                  onDelete={() => handleDeleteTube(tube.id)}
+                  onStatusChange={(status: string) => handleStatusChange(tube.id, status)}
+                  onEdit={() => setEditingTube(tube)}
+                  onAddToExperiment={() => handleAddToExperiment(tube)}
+                  hasExperiment={!!currentExperiment}
+                  groups={groups}
+                  onUpdateTube={updateTube}
+                />
+              ))
+            )
           ))
         )}
       </div>
@@ -146,13 +222,34 @@ export default function WarehousePage() {
             }
             setEditingTube(null)
           }}
+          groups={groups}
+        />
+      )}
+      
+      {/* 分组编辑弹窗 */}
+      {editingGroup && (
+        <GroupEditModal
+          group={editingGroup}
+          onClose={() => setEditingGroup(null)}
+          onSave={(updates) => {
+            updateGroup(editingGroup.id, updates)
+            setEditingGroup(null)
+          }}
+          onDelete={() => {
+            // 删除分组时，将该组的试管变为未分组
+            tubes.filter(t => t.groupId === editingGroup.id).forEach(t => {
+              updateTube(t.id, { groupId: undefined })
+            })
+            useGroupStore.getState().deleteGroup(editingGroup.id)
+            setEditingGroup(null)
+          }}
         />
       )}
     </div>
   )
 }
 
-function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment }: any) {
+function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment, groups, onUpdateTube }: any) {
   const statusColors: Record<string, string> = {
     active: '#10b981',
     depleted: '#f59e0b',
@@ -220,6 +317,21 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
             <span>{tube.storageCondition}</span>
           </div>
         )}
+        
+        {/* 分组选择器 */}
+        <div className={styles.tubeInfo}>
+          <span className={styles.label}>分组:</span>
+          <select
+            className={styles.statusSelect}
+            value={tube.groupId || ''}
+            onChange={(e) => onUpdateTube(tube.id, { groupId: e.target.value || undefined })}
+          >
+            <option value="">未分组</option>
+            {groups.map((g: TubeGroup) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
       
       <div className={styles.tubeActions}>
@@ -252,7 +364,116 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
   )
 }
 
-function AddTubeForm({ onClose, onSubmit }: any) {
+// 分组方框组件
+function GroupBox({ group, tubes, onEditGroup, onDeleteTube, onStatusChange, onEditTube, onAddToExperiment, hasExperiment, groups, onUpdateTube }: any) {
+  return (
+    <div className={styles.groupBox} style={{ borderColor: group.color }}>
+      <div className={styles.groupBoxHeader} style={{ backgroundColor: group.color + '30' }}>
+        <div className={styles.groupBoxTitleRow}>
+          <button className={styles.groupEditBtn} onClick={onEditGroup}>修改</button>
+          <span className={styles.groupName}>{group.name}</span>
+          {group.notes && <span className={styles.groupNotes}>{group.notes}</span>}
+        </div>
+      </div>
+      <div className={styles.groupBoxContent}>
+        {tubes.map((tube: any) => (
+          <TubeCard 
+            key={tube.id}
+            tube={tube}
+            onDelete={() => onDeleteTube(tube.id)}
+            onStatusChange={(status: string) => onStatusChange(tube.id, status)}
+            onEdit={() => onEditTube(tube)}
+            onAddToExperiment={() => onAddToExperiment(tube)}
+            hasExperiment={hasExperiment}
+            groups={groups}
+            onUpdateTube={onUpdateTube}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// 分组编辑弹窗
+function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
+  const [name, setName] = useState(group.name)
+  const [color, setColor] = useState(group.color)
+  const [notes, setNotes] = useState(group.notes || '')
+  
+  const presetColors = ['#e0e7ff', '#fce7f3', '#dbeafe', '#d1fae5', '#fef3c7', '#ede9fe', '#ffe4e6', '#e0f2fe']
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      alert('请输入分组名称')
+      return
+    }
+    onSave({ name: name.trim(), color, notes: notes.trim() })
+  }
+  
+  return (
+    <div className={styles.modal} onClick={onClose}>
+      <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <h2 className={styles.modalTitle}>编辑分组</h2>
+        
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.formGroup}>
+            <label>分组名称</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          
+          <div className={styles.formGroup}>
+            <label>分组颜色</label>
+            <div className={styles.colorPicker}>
+              {presetColors.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`${styles.colorOption} ${color === c ? styles.colorOptionActive : ''}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setColor(c)}
+                />
+              ))}
+              <input
+                type="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                className={styles.colorInput}
+              />
+            </div>
+          </div>
+          
+          <div className={styles.formGroup}>
+            <label>备注</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="分组备注..."
+              rows={2}
+            />
+          </div>
+          
+          <div className={styles.formActions}>
+            <button type="button" className={styles.deleteGroupBtn} onClick={onDelete}>
+              删除分组
+            </button>
+            <div className={styles.formActionsRight}>
+              <button type="button" className={styles.cancelBtn} onClick={onClose}>取消</button>
+              <button type="submit" className={styles.submitBtn}>保存</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function AddTubeForm({ onClose, onSubmit, groups }: any) {
   const [formData, setFormData] = useState<{
     name: string
     type: TubeType
@@ -266,6 +487,7 @@ function AddTubeForm({ onClose, onSubmit }: any) {
     storageCondition: string
     notes: string
     status: TubeStatus
+    groupId: string
   }>({
     name: '',
     type: 'source',
@@ -278,7 +500,8 @@ function AddTubeForm({ onClose, onSubmit }: any) {
     storageLocation: '',
     storageCondition: '',
     notes: '',
-    status: 'active'
+    status: 'active',
+    groupId: ''
   })
   
   const handleSubmit = (e: React.FormEvent) => {
@@ -297,7 +520,8 @@ function AddTubeForm({ onClose, onSubmit }: any) {
       ...formData,
       substances,
       totalVolume: formData.isInfinite ? Infinity : formData.totalVolume,
-      remainingVolume: formData.isInfinite ? Infinity : formData.totalVolume
+      remainingVolume: formData.isInfinite ? Infinity : formData.totalVolume,
+      groupId: formData.groupId || undefined
     })
   }
   
@@ -317,6 +541,19 @@ function AddTubeForm({ onClose, onSubmit }: any) {
                 placeholder="如: E1, DNA Sample A"
                 autoFocus
               />
+            </div>
+            
+            <div className={styles.formGroup}>
+              <label>分组</label>
+              <select
+                value={formData.groupId}
+                onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
+              >
+                <option value="">未分组</option>
+                {groups.map((g: TubeGroup) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
             </div>
           </div>
           
@@ -487,7 +724,7 @@ function AddTubeForm({ onClose, onSubmit }: any) {
 }
 
 // 试剂详情/编辑弹窗
-function TubeDetailModal({ tube, onClose, onSave }: any) {
+function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
   const [formData, setFormData] = useState<{
     name: string
     type: TubeType
@@ -501,6 +738,7 @@ function TubeDetailModal({ tube, onClose, onSave }: any) {
     storageCondition: string
     notes: string
     status: TubeStatus
+    groupId: string
   }>({
     name: tube.name || '',
     type: tube.type || 'source',
@@ -513,7 +751,8 @@ function TubeDetailModal({ tube, onClose, onSave }: any) {
     storageLocation: tube.storageLocation || '',
     storageCondition: tube.storageCondition || '',
     notes: tube.notes || '',
-    status: tube.status || 'active'
+    status: tube.status || 'active',
+    groupId: tube.groupId || ''
   })
   
   const handleSubmit = (e: React.FormEvent) => {
@@ -533,7 +772,8 @@ function TubeDetailModal({ tube, onClose, onSave }: any) {
       ...formData,
       substances,
       totalVolume: formData.isInfinite ? Infinity : formData.totalVolume,
-      remainingVolume: formData.isInfinite ? Infinity : formData.remainingVolume
+      remainingVolume: formData.isInfinite ? Infinity : formData.remainingVolume,
+      groupId: formData.groupId || undefined
     })
   }
   
@@ -559,6 +799,19 @@ function TubeDetailModal({ tube, onClose, onSave }: any) {
                 placeholder="如: E1, DNA Sample A"
                 autoFocus
               />
+            </div>
+            
+            <div className={styles.formGroup}>
+              <label>分组</label>
+              <select
+                value={formData.groupId}
+                onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
+              >
+                <option value="">未分组</option>
+                {groups.map((g: TubeGroup) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
             </div>
           </div>
           

@@ -36,7 +36,8 @@ function dbToTube(record: any): Tube {
     storageLocation: record.storage_location || undefined,
     storageCondition: record.storage_condition || undefined,
     notes: record.notes || undefined,
-    tags: record.tags ? JSON.parse(record.tags) : undefined
+    tags: record.tags ? JSON.parse(record.tags) : undefined,
+    groupId: record.group_id || undefined
   }
 }
 
@@ -57,7 +58,8 @@ function tubeToDb(tube: Tube): any {
     storageLocation: tube.storageLocation || null,
     storageCondition: tube.storageCondition || null,
     notes: tube.notes || null,
-    tags: JSON.stringify(tube.tags || [])
+    tags: JSON.stringify(tube.tags || []),
+    groupId: tube.groupId || null
   }
 }
 

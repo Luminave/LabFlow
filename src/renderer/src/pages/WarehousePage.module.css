@@ -14,6 +14,25 @@
   background: var(--surface-color);
 }
 
+.headerButtons {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.addGroupButton {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.addGroupButton:hover {
+  background: var(--bg-color);
+  color: var(--text-primary);
+}
+
 .title {
   font-size: 24px;
   font-weight: 600;
@@ -322,4 +341,106 @@
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+/* 分组方框 */
+.groupBox {
+  grid-column: 1 / -1;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.groupBoxHeader {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.groupBoxTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.groupEditBtn {
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.groupEditBtn:hover {
+  background: var(--bg-color);
+  color: var(--text-primary);
+}
+
+.groupName {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.groupNotes {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-left: var(--spacing-sm);
+}
+
+.groupBoxContent {
+  padding: var(--spacing-md);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* 颜色选择器 */
+.colorPicker {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.colorOption {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.colorOption:hover {
+  border-color: var(--text-muted);
+}
+
+.colorOptionActive {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px var(--primary-color);
+}
+
+.colorInput {
+  width: 28px;
+  height: 28px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.deleteGroupBtn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+}
+
+.deleteGroupBtn:hover {
+  background: #fecaca;
+}
+
+.formActionsRight {
+  display: flex;
+  gap: var(--spacing-sm);
 }

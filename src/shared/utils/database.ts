@@ -116,9 +116,9 @@ function createTables() {
   // 迁移：添加新字段（如果不存在）
   try {
     // 检查 experiments 表是否有 is_waste 字段
-    const columns = db.exec("PRAGMA table_info(experiments)")
-    if (columns.length > 0) {
-      const columnNames = columns[0].values.map((col: any) => col[1])
+    const expColumns = db.exec("PRAGMA table_info(experiments)")
+    if (expColumns.length > 0) {
+      const columnNames = expColumns[0].values.map((col: any) => col[1])
       if (!columnNames.includes('is_waste')) {
         db.run(`ALTER TABLE experiments ADD COLUMN is_waste INTEGER DEFAULT 0`)
       }
@@ -130,6 +130,15 @@ function createTables() {
       }
       if (!columnNames.includes('end_state_tubes')) {
         db.run(`ALTER TABLE experiments ADD COLUMN end_state_tubes TEXT`)
+      }
+    }
+    
+    // 检查 tubes 表是否有 group_id 字段
+    const tubeColumns = db.exec("PRAGMA table_info(tubes)")
+    if (tubeColumns.length > 0) {
+      const tubeColumnNames = tubeColumns[0].values.map((col: any) => col[1])
+      if (!tubeColumnNames.includes('group_id')) {
+        db.run(`ALTER TABLE tubes ADD COLUMN group_id TEXT`)
       }
     }
   } catch (e) {

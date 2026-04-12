@@ -28,6 +28,15 @@ export type TubeType = 'source' | 'intermediate' | 'buffer' | 'sample' | 'waste'
 // 试管状态
 export type TubeStatus = 'active' | 'depleted' | 'discarded'
 
+// 试管分组
+export interface TubeGroup {
+  id: string // 唯一编号 (UUID)
+  name: string // 分组名称
+  color: string // 分组方框颜色
+  notes: string // 备注
+  createdAt: string // ISO 8601
+}
+
 // 试管
 export interface Tube {
   id: string // 唯一编号 (UUID)
@@ -48,6 +57,9 @@ export interface Tube {
   
   // 作为原料使用（上次实验剩下的中间产物）
   asSource?: boolean // 当为 true 时，检查时赦免成分输入问题
+  
+  // 分组
+  groupId?: string // 分组 ID
   
   // 元信息
   createdAt: string // ISO 8601
