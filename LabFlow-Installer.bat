@@ -45,8 +45,8 @@ echo.
 echo Downloading Git installer...
 echo Please wait...
 
-:: Download Git installer using PowerShell
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe' -OutFile '%TEMP%\Git-Installer.exe'"
+:: Download Git installer using curl (built into Windows 10+)
+curl -# -L -o "%TEMP%\Git-Installer.exe" "https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe"
 
 if not exist "%TEMP%\Git-Installer.exe" (
     echo [ERROR] Failed to download Git installer!
@@ -60,7 +60,7 @@ if not exist "%TEMP%\Git-Installer.exe" (
 
 echo Installing Git...
 echo Please follow the installation wizard.
-start /wait "%TEMP%\Git-Installer.exe"
+start /wait "" "%TEMP%\Git-Installer.exe"
 
 :: Clean up
 del "%TEMP%\Git-Installer.exe" 2>nul
@@ -110,8 +110,8 @@ echo.
 echo Downloading Node.js installer...
 echo Please wait...
 
-:: Download Node.js installer
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi' -OutFile '%TEMP%\NodeJS-Installer.msi'"
+:: Download Node.js installer using curl (built into Windows 10+)
+curl -# -L -o "%TEMP%\NodeJS-Installer.msi" "https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi"
 
 if not exist "%TEMP%\NodeJS-Installer.msi" (
     echo [ERROR] Failed to download Node.js installer!
