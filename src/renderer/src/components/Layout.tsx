@@ -27,6 +27,14 @@ export default function Layout({ children }: LayoutProps) {
         
         <nav className={styles.nav}>
           <NavLink 
+            to="/home" 
+            className={({ isActive }) => isActive ? styles.navItemActive : styles.navItem}
+          >
+            <span className={styles.navIcon}>🏠</span>
+            {t('nav.home', language)}
+          </NavLink>
+          
+          <NavLink 
             to="/warehouse" 
             className={({ isActive }) => isActive ? styles.navItemActive : styles.navItem}
           >
@@ -40,6 +48,14 @@ export default function Layout({ children }: LayoutProps) {
           >
             <span className={styles.navIcon}>🔬</span>
             {t('nav.experiment', language)}
+          </NavLink>
+          
+          <NavLink 
+            to="/narrator" 
+            className={({ isActive }) => isActive ? styles.navItemActive : styles.navItem}
+          >
+            <span className={styles.navIcon}>📖</span>
+            {t('nav.narrator', language)}
           </NavLink>
           
           <NavLink 
@@ -64,6 +80,14 @@ export default function Layout({ children }: LayoutProps) {
           >
             <span className={styles.navIcon}>🎨</span>
             {t('nav.settings', language)}
+          </NavLink>
+          
+          <NavLink 
+            to="/tools" 
+            className={({ isActive }) => isActive ? styles.navItemActive : styles.navItem}
+          >
+            <span className={styles.navIcon}>🔧</span>
+            {t('nav.tools', language)}
           </NavLink>
           
           <NavLink 

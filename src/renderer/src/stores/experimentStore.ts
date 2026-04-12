@@ -1033,6 +1033,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       ? experiments.map(e => e.id === completedExperiment.id ? completedExperiment : e)
       : [...experiments, completedExperiment]
     
+    // 同时保存到 localStorage 作为备份（和 saveCurrentExperiment 一致）
+    saveExperimentsToStorage(newExperiments)
+    
     set({ currentExperiment: completedExperiment, currentTubes, tubePositions: [], experiments: newExperiments, showEndState: false })
   },
   
@@ -1096,7 +1099,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       await window.electronAPI.saveExperiment(experimentToDb(revertedExperiment))
     }
     
-    set({ experiments: get().experiments.map(e => e.id === experimentId ? revertedExperiment : e) })
+    const newExperiments = get().experiments.map(e => e.id === experimentId ? revertedExperiment : e)
+    saveExperimentsToStorage(newExperiments)
+    set({ experiments: newExperiments })
     console.log('[revertExperiment] Experiment reverted successfully')
     return true
   },

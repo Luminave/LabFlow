@@ -5,12 +5,15 @@ export const translations: Record<string, Record<Language, string>> = {
   'app.subtitle': { zh: '实验室试剂管理系统', en: 'Lab Reagent Management System' },
   
   // 侧边栏
+  'nav.home': { zh: '首页', en: 'Home' },
   'nav.warehouse': { zh: '试剂仓库', en: 'Warehouse' },
   'nav.experiment': { zh: '实验模拟', en: 'Experiment' },
   'nav.history': { zh: '实验记录', en: 'History' },
   'nav.trace': { zh: '试管溯源', en: 'Tube Trace' },
   'nav.settings': { zh: '颜色设置', en: 'Color Settings' },
+  'nav.tools': { zh: '小工具', en: 'Tools' },
   'nav.backup': { zh: '数据备份', en: 'Data Backup' },
+  'nav.narrator': { zh: '讲述者', en: 'Narrator' },
   
   // 工具栏
   'toolbar.newExperiment': { zh: '新建工程', en: 'New Project' },

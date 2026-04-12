@@ -12,7 +12,8 @@ import {
   Node,
   Edge,
   Panel,
-  NodeTypes
+  NodeTypes,
+  EdgeTypes
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -22,9 +23,11 @@ import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
 import { Tube, Substance, ConcentrationUnit, VolumeUnit, TransferConnection } from '@shared/types'
 import TubeNode from '../components/TubeNode'
+import TransferEdge from '../components/TransferEdge'
 import styles from './ExperimentPage.module.css'
 
 const nodeTypes: NodeTypes = { tube: TubeNode }
+const edgeTypes: EdgeTypes = { transfer: TransferEdge }
 
 export default function ExperimentPage() {
   const navigate = useNavigate()
@@ -377,6 +380,18 @@ export default function ExperimentPage() {
   const handleEdgesChange = useCallback((changes: any[]) => {
     onEdgesChange(changes)
   }, [onEdgesChange])
+
+  // 更新边标签位置
+  const handleUpdateLabelPosition = useCallback((edgeId: string, position: number) => {
+    if (isReadOnly) return
+    updateConnection(edgeId, { labelPosition: position })
+    // 同步更新 edges 中的 data
+    setEdges(eds => eds.map(e => 
+      e.id === edgeId 
+        ? { ...e, data: { ...e.data, labelPosition: position } }
+        : e
+    ))
+  }, [updateConnection, isReadOnly])
   
   // 编辑试管
   const [editingTube, setEditingTube] = useState<Tube | null>(null)
@@ -468,40 +483,33 @@ export default function ExperimentPage() {
           id: conn.id,
           source: conn.fromTubeId,
           target: conn.toTubeId,
-          type: 'bezier', // 使用贝塞尔曲线（弧线）
+          type: 'transfer', // 使用自定义可拖动标签边
           animated: true,
-          label: `${conn.volume} ${conn.volumeUnit}`,
-          labelStyle: { fill: '#1e293b', fontWeight: 600, fontSize: 12 },
-          labelShowBg: true,
-          labelBgStyle: { fill: '#fff', fillOpacity: 0.95 },
-          labelBgPadding: [8, 4] as [number, number],
-          labelBgBorderRadius: 4,
-          style: { stroke: '#4f46e5', strokeWidth: 3 }, // 更粗更深色的线条
-          data: { volume: conn.volume, volumeUnit: conn.volumeUnit }
+          style: { stroke: '#4f46e5', strokeWidth: 3 },
+          data: { 
+            volume: conn.volume, 
+            volumeUnit: conn.volumeUnit,
+            labelPosition: conn.labelPosition ?? 0.5,
+            onUpdateLabelPosition: handleUpdateLabelPosition
+          }
         }
       }).filter(Boolean) as Edge[]
       
       setEdges(newEdges)
     }
-  }, [connections, showBuffers, currentTubes])
+  }, [connections, showBuffers, currentTubes, handleUpdateLabelPosition])
   
   // 连接
   const onConnect = useCallback((connection: Connection) => {
     if (isReadOnly) return
     
-    const newEdge = {
+    const newEdge: Edge = {
       ...connection,
       id: crypto.randomUUID(),
-      type: 'bezier' as const, // 使用贝塞尔曲线（弧线）
+      type: 'transfer',
       animated: true,
-      label: '0 μL',
-      labelStyle: { fill: '#1e293b', fontWeight: 600, fontSize: 12 },
-      labelShowBg: true,
-      labelBgStyle: { fill: '#fff', fillOpacity: 0.95 },
-      labelBgPadding: [8, 4] as [number, number],
-      labelBgBorderRadius: 4,
       style: { stroke: '#4f46e5', strokeWidth: 3 },
-      data: { volume: 0, volumeUnit: 'μL' }
+      data: { volume: 0, volumeUnit: 'μL', labelPosition: 0.5, onUpdateLabelPosition: handleUpdateLabelPosition }
     }
     
     setEdges(eds => addEdge(newEdge, eds) as Edge[])
@@ -514,29 +522,26 @@ export default function ExperimentPage() {
     })
   }, [addConnection, isReadOnly])
   
-  // 点击边修改体积
-  const onEdgeDoubleClick = useCallback((event: React.MouseEvent, edge: Edge) => {
-    if (isReadOnly) return
-    
-    event.stopPropagation()
-    
-    const currentVolume = edge.data?.volume || 0
-    const volume = prompt('请输入移液体积 (μL):', String(currentVolume))
-    
-    if (volume !== null) {
-      const vol = parseFloat(volume) || 0
-      
-      setEdges(eds => eds.map(e => 
-        e.id === edge.id 
-          ? { ...e, label: `${vol} μL`, data: { ...e.data, volume: vol } }
-          : e
-      ))
-      
-      updateConnection(edge.id, { volume: vol })
-      
-      setTimeout(() => recalculateTargetTube(edge.target as string), 100)
-    }
-  }, [updateConnection, isReadOnly])
+  // 点击边修改体积（已隐藏输入框，保留代码供后续使用）
+  // const onEdgeDoubleClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+  //   if (isReadOnly) return
+  //   event.stopPropagation()
+  //   const currentVolume = edge.data?.volume || 0
+  //   const volume = prompt('请输入移液体积 (μL):', String(currentVolume))
+  //   if (volume !== null) {
+  //     const vol = parseFloat(volume) || 0
+  //     setEdges(eds => eds.map(e =>
+  //       e.id === edge.id
+  //         ? { ...e, label: `${vol} μL`, data: { ...e.data, volume: vol } }
+  //         : e
+  //     ))
+  //     updateConnection(edge.id, { volume: vol })
+  //     setTimeout(() => recalculateTargetTube(edge.target as string), 100)
+  //   }
+  // }, [updateConnection, isReadOnly])
+  const onEdgeDoubleClick = useCallback(() => {
+    // 双击不弹出输入框，保留数字显示和拖动功能
+  }, [])
   
   // 计算目标试管的物质组成
   const recalculateTargetTube = (targetId: string) => {
@@ -1105,6 +1110,11 @@ export default function ExperimentPage() {
   
   return (
     <div className={styles.container}>
+      {/* 页面标题 */}
+      <div className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>{t('nav.experiment', language)}</h1>
+      </div>
+      
       <header className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
           {!currentExperiment ? (
@@ -1250,6 +1260,7 @@ export default function ExperimentPage() {
             onEdgeDoubleClick={onEdgeDoubleClick}
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             snapToGrid
             snapGrid={[15, 15]}

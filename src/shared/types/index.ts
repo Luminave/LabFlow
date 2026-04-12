@@ -80,6 +80,7 @@ export interface TransferConnection {
   toTubeId: string // 目标试管 ID
   volume: number // 移液体积
   volumeUnit: VolumeUnit
+  labelPosition?: number // 标签在曲线上的位置 (0-1)，默认 0.5
 }
 
 // 实验状态

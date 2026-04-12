@@ -5,6 +5,19 @@
   overflow: hidden;
 }
 
+.pageHeader {
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
 .toolbar {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--surface-color);
