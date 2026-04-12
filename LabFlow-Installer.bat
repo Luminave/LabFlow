@@ -21,32 +21,87 @@ if %errorLevel% neq 0 (
 echo [1/5] Checking Git...
 git --version >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] Git not found!
+    echo [WARNING] Git not found!
     echo.
-    echo Please install Git first:
-    echo https://git-scm.com/download/win
+    set /p INSTALL_GIT="Do you want to install Git? (Y/N): "
+    if /i not "%INSTALL_GIT%"=="Y" (
+        echo Installation cancelled. Git is required.
+        pause
+        exit /b 1
+    )
     echo.
-    echo Then run this script again
-    pause
-    exit /b 1
+    echo Downloading Git installer...
+    echo Please wait...
+    
+    :: Download Git installer
+    powershell -Command "Invoke-WebRequest -Uri 'https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe' -OutFile '%TEMP%\Git-Installer.exe'"
+    
+    if not exist "%TEMP%\Git-Installer.exe" (
+        echo [ERROR] Failed to download Git installer!
+        echo Please download Git manually from: https://git-scm.com/download/win
+        pause
+        exit /b 1
+    )
+    
+    echo Installing Git...
+    echo Please follow the installation wizard.
+    start /wait "%TEMP%\Git-Installer.exe"
+    
+    :: Verify installation
+    git --version >nul 2>&1
+    if %errorLevel% neq 0 (
+        echo [ERROR] Git installation failed or not in PATH!
+        echo Please restart this script or install Git manually.
+        pause
+        exit /b 1
+    )
+    echo [OK] Git installed successfully
+) else (
+    echo [OK] Git already installed
 )
-echo [OK] Git installed
 
 :: Check Node.js
 echo.
 echo [2/5] Checking Node.js...
 node --version >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] Node.js not found!
+    echo [WARNING] Node.js not found!
     echo.
-    echo Please install Node.js first (v18 or higher):
-    echo https://nodejs.org/
+    set /p INSTALL_NODE="Do you want to install Node.js? (Y/N): "
+    if /i not "%INSTALL_NODE%"=="Y" (
+        echo Installation cancelled. Node.js is required.
+        pause
+        exit /b 1
+    )
     echo.
-    echo Then run this script again
-    pause
-    exit /b 1
+    echo Downloading Node.js installer...
+    echo Please wait...
+    
+    :: Download Node.js installer
+    powershell -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi' -OutFile '%TEMP%\NodeJS-Installer.msi'"
+    
+    if not exist "%TEMP%\NodeJS-Installer.msi" (
+        echo [ERROR] Failed to download Node.js installer!
+        echo Please download Node.js manually from: https://nodejs.org/
+        pause
+        exit /b 1
+    )
+    
+    echo Installing Node.js...
+    start /wait msiexec /i "%TEMP%\NodeJS-Installer.msi" /quiet /norestart
+    
+    :: Verify installation
+    node --version >nul 2>&1
+    if %errorLevel% neq 0 (
+        echo [ERROR] Node.js installation failed!
+        echo Please restart this script or install Node.js manually.
+        pause
+        exit /b 1
+    )
+    echo [OK] Node.js installed successfully
+) else (
+    echo [OK] Node.js already installed
 )
-echo [OK] Node.js installed
 
 :: Select installation location
 echo.
