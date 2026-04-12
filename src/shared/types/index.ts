@@ -58,6 +58,9 @@ export interface Tube {
   // 作为原料使用（上次实验剩下的中间产物）
   asSource?: boolean // 当为 true 时，检查时赦免成分输入问题
   
+  // 配置序号（用于讲述者排序）
+  configOrder?: number // 正整数，按序号排序生成实验步骤
+  
   // 分组
   groupId?: string // 分组 ID
   
