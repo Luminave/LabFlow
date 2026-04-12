@@ -1,3 +1,11 @@
+<div align="center">
+
+### 🌐 [English Version / 英文文档](README_EN.md)
+
+</div>
+
+---
+
 # LabFlow
 
 > 实验室试剂管理与实验流程模拟工具 — 让实验设计更直观、更高效
