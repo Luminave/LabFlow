@@ -212,6 +212,7 @@ echo Set oLink = oWS.CreateShortcut(sLinkFile) >> CreateShortcut.vbs
 echo oLink.TargetPath = "%INSTALL_PATH%\Start-LabFlow.bat" >> CreateShortcut.vbs
 echo oLink.WorkingDirectory = "%INSTALL_PATH%" >> CreateShortcut.vbs
 echo oLink.Description = "Start LabFlow Lab Management System" >> CreateShortcut.vbs
+echo oLink.IconLocation = "%INSTALL_PATH%\labflow-icon.ico" >> CreateShortcut.vbs
 echo oLink.Save >> CreateShortcut.vbs
 
 cscript //nologo CreateShortcut.vbs
@@ -235,3 +236,4 @@ echo Access URL: http://localhost:5173/
 echo.
 echo Press any key to exit...
 pause >nul
+
