@@ -20,6 +20,27 @@ interface GroupState {
 
 const GROUPS_KEY = 'labflow_groups'
 
+// 醒目的分组预设颜色
+export const GROUP_PRESET_COLORS = [
+  '#6366f1', // 靛蓝
+  '#ec4899', // 粉红
+  '#14b8a6', // 青绿
+  '#f59e0b', // 琥珀
+  '#8b5cf6', // 紫色
+  '#ef4444', // 红色
+  '#06b6d4', // 青色
+  '#84cc16', // 黄绿
+  '#f97316', // 橙色
+  '#a855f7', // 紫罗兰
+  '#10b981', // 翠绿
+  '#e11d48', // 玫红
+]
+
+// 随机获取一个分组颜色
+function getRandomGroupColor(): string {
+  return GROUP_PRESET_COLORS[Math.floor(Math.random() * GROUP_PRESET_COLORS.length)]
+}
+
 export const useGroupStore = create<GroupState>((set, get) => ({
   groups: [],
   loading: false,
@@ -34,11 +55,12 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
   },
   
-  addGroup: (name, color = '#e0e7ff', notes = '') => {
+  addGroup: (name, color, notes = '') => {
+    const finalColor = color || getRandomGroupColor()
     const newGroup: TubeGroup = {
       id: crypto.randomUUID(),
       name,
-      color,
+      color: finalColor,
       notes,
       createdAt: new Date().toISOString()
     }

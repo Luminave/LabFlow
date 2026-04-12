@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWarehouseStore } from '../stores/warehouseStore'
 import { useExperimentStore } from '../stores/experimentStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
-import { useGroupStore } from '../stores/groupStore'
+import { useGroupStore, GROUP_PRESET_COLORS } from '../stores/groupStore'
 import { TubeType, TubeStatus, VolumeUnit, ConcentrationUnit, TubeGroup } from '@shared/types'
 import styles from './WarehousePage.module.css'
 
@@ -26,6 +26,9 @@ function SubstanceDisplay({ name, concentration, concentrationUnit }: { name: st
   )
 }
 
+const COLLAPSED_KEY = 'labflow_collapsed_groups'
+const FLASH_KEY = 'labflow_flash_target'
+
 export default function WarehousePage() {
   const navigate = useNavigate()
   const { tubes, addTube, deleteTube, updateTubeStatus, updateTube, fetchTubes, loading } = useWarehouseStore()
@@ -35,19 +38,28 @@ export default function WarehousePage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingTube, setEditingTube] = useState<any>(null)
   const [editingGroup, setEditingGroup] = useState<TubeGroup | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [flashTarget, setFlashTarget] = useState<string | null>(null)
+  const tubeListRef = useRef<HTMLDivElement>(null)
   
   // 加载已保存的试管和颜色配置
   useEffect(() => {
     fetchTubes()
     loadColors()
     loadGroups()
+    // 加载折叠状态
+    try {
+      const saved = localStorage.getItem(COLLAPSED_KEY)
+      if (saved) setCollapsedGroups(new Set(JSON.parse(saved)))
+    } catch {}
   }, [fetchTubes, loadColors, loadGroups])
   
-  // 按分组整理试管
+  // 按分组整理试管（显示所有分组，包括空的）
   const groupedTubes = useMemo(() => {
     const grouped: { group: TubeGroup | null; tubes: typeof tubes }[] = []
     
-    // 先按分组分组
+    // 先按分组归类试管
     const groupMap = new Map<string, typeof tubes>()
     const ungrouped: typeof tubes = []
     
@@ -61,13 +73,10 @@ export default function WarehousePage() {
       }
     }
     
-    // 添加已创建的分组（含试管的）
+    // 添加所有已创建的分组（包括空的）
     for (const group of groups) {
-      const groupTubes = groupMap.get(group.id)
-      if (groupTubes && groupTubes.length > 0) {
-        grouped.push({ group, tubes: groupTubes })
-        groupMap.delete(group.id)
-      }
+      grouped.push({ group, tubes: groupMap.get(group.id) || [] })
+      groupMap.delete(group.id)
     }
     
     // 添加引用了已删除分组的试管
@@ -82,6 +91,62 @@ export default function WarehousePage() {
     
     return grouped
   }, [tubes, groups])
+  
+  // 搜索结果
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return null
+    const q = searchQuery.toLowerCase()
+    const results: { type: 'group' | 'tube'; id: string; name: string; subtitle?: string; groupId?: string }[] = []
+    
+    // 搜索分组
+    for (const group of groups) {
+      if (group.name.toLowerCase().includes(q) || group.notes?.toLowerCase().includes(q)) {
+        results.push({ type: 'group', id: group.id, name: group.name, subtitle: group.notes || undefined })
+      }
+    }
+    
+    // 搜索试管
+    for (const tube of tubes) {
+      if (tube.name.toLowerCase().includes(q)) {
+        results.push({ type: 'tube', id: tube.id, name: tube.name, subtitle: tube.type === 'buffer' ? '缓冲液' : tube.type === 'source' ? '原料' : '中间产物', groupId: tube.groupId })
+      }
+    }
+    
+    return results
+  }, [searchQuery, groups, tubes])
+  
+  // 切换分组折叠状态
+  const toggleCollapse = useCallback((groupId: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }, [])
+  
+  // 滚动并闪烁目标
+  const scrollToAndFlash = useCallback((targetId: string, groupId?: string) => {
+    // 先展开目标所在分组
+    if (groupId && collapsedGroups.has(groupId)) {
+      toggleCollapse(groupId)
+    }
+    setSearchQuery('')
+    // 等 DOM 更新后滚动
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const el = document.getElementById(`target-${targetId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          setFlashTarget(targetId)
+        }
+      }, 100)
+    })
+  }, [collapsedGroups, toggleCollapse])
   
   // 新增分组
   const handleAddGroup = () => {
@@ -148,6 +213,35 @@ export default function WarehousePage() {
       <header className={styles.header}>
         <h1 className={styles.title}>试剂仓库</h1>
         <div className={styles.headerButtons}>
+          <div className={styles.searchWrapper}>
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder="搜索分组或试剂..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchResults && searchResults.length > 0 && (
+              <div className={styles.searchDropdown}>
+                {searchResults.map(r => (
+                  <div
+                    key={r.id}
+                    className={styles.searchResultItem}
+                    onClick={() => scrollToAndFlash(r.id, r.groupId)}
+                  >
+                    <span className={styles.searchResultIcon}>{r.type === 'group' ? '📁' : '🧪'}</span>
+                    <span className={styles.searchResultName}>{r.name}</span>
+                    {r.subtitle && <span className={styles.searchResultSub}>{r.subtitle}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {searchResults && searchResults.length === 0 && searchQuery.trim() && (
+              <div className={styles.searchDropdown}>
+                <div className={styles.searchEmpty}>无匹配结果</div>
+              </div>
+            )}
+          </div>
           <button className={styles.addGroupButton} onClick={handleAddGroup}>
             📁 新增分组
           </button>
@@ -165,10 +259,10 @@ export default function WarehousePage() {
         />
       )}
       
-      <div className={styles.tubeList}>
+      <div className={styles.tubeList} ref={tubeListRef}>
         {loading ? (
           <div className={styles.empty}>加载中...</div>
-        ) : tubes.length === 0 ? (
+        ) : tubes.length === 0 && groups.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>📦</div>
             <p>仓库为空</p>
@@ -181,6 +275,8 @@ export default function WarehousePage() {
                 key={group.id}
                 group={group}
                 tubes={groupTubes}
+                collapsed={collapsedGroups.has(group.id)}
+                onToggleCollapse={() => toggleCollapse(group.id)}
                 onEditGroup={() => setEditingGroup(group)}
                 onDeleteTube={handleDeleteTube}
                 onStatusChange={handleStatusChange}
@@ -189,6 +285,8 @@ export default function WarehousePage() {
                 hasExperiment={!!currentExperiment}
                 groups={groups}
                 onUpdateTube={updateTube}
+                flashTarget={flashTarget}
+                onFlashDone={() => setFlashTarget(null)}
               />
             ) : (
               groupTubes.map(tube => (
@@ -202,6 +300,8 @@ export default function WarehousePage() {
                   hasExperiment={!!currentExperiment}
                   groups={groups}
                   onUpdateTube={updateTube}
+                  flashTarget={flashTarget}
+                  onFlashDone={() => setFlashTarget(null)}
                 />
               ))
             )
@@ -249,7 +349,7 @@ export default function WarehousePage() {
   )
 }
 
-function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment, groups, onUpdateTube }: any) {
+function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment, groups, onUpdateTube, flashTarget, onFlashDone }: any) {
   const statusColors: Record<string, string> = {
     active: '#10b981',
     depleted: '#f59e0b',
@@ -268,8 +368,10 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
     intermediate: '🧪 中间产物'
   }
   
+  const isFlashing = flashTarget === tube.id
+  
   return (
-    <div className={styles.tubeCard}>
+    <div id={`target-${tube.id}`} className={`${styles.tubeCard} ${isFlashing ? styles.flashAnimation : ''}`} onAnimationEnd={isFlashing ? onFlashDone : undefined}>
       <div className={styles.tubeHeader}>
         <h3 className={styles.tubeName}>{tube.name}</h3>
         <span className={styles.tubeStatus} style={{ backgroundColor: statusColors[tube.status] }}>
@@ -365,31 +467,43 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
 }
 
 // 分组方框组件
-function GroupBox({ group, tubes, onEditGroup, onDeleteTube, onStatusChange, onEditTube, onAddToExperiment, hasExperiment, groups, onUpdateTube }: any) {
+function GroupBox({ group, tubes, collapsed, onToggleCollapse, onEditGroup, onDeleteTube, onStatusChange, onEditTube, onAddToExperiment, hasExperiment, groups, onUpdateTube, flashTarget, onFlashDone }: any) {
+  const isGroupFlashing = flashTarget === group.id
   return (
-    <div className={styles.groupBox} style={{ borderColor: group.color }}>
+    <div id={`target-${group.id}`} className={`${styles.groupBox} ${isGroupFlashing ? styles.flashAnimation : ''}`} style={{ borderColor: group.color }} onAnimationEnd={isGroupFlashing ? onFlashDone : undefined}>
       <div className={styles.groupBoxHeader} style={{ backgroundColor: group.color + '30' }}>
         <div className={styles.groupBoxTitleRow}>
           <button className={styles.groupEditBtn} onClick={onEditGroup}>修改</button>
           <span className={styles.groupName}>{group.name}</span>
           {group.notes && <span className={styles.groupNotes}>{group.notes}</span>}
+          <button className={styles.groupCollapseBtn} onClick={onToggleCollapse}>
+            {collapsed ? '展开' : '收起'}
+          </button>
         </div>
       </div>
-      <div className={styles.groupBoxContent}>
-        {tubes.map((tube: any) => (
-          <TubeCard 
-            key={tube.id}
-            tube={tube}
-            onDelete={() => onDeleteTube(tube.id)}
-            onStatusChange={(status: string) => onStatusChange(tube.id, status)}
-            onEdit={() => onEditTube(tube)}
-            onAddToExperiment={() => onAddToExperiment(tube)}
-            hasExperiment={hasExperiment}
-            groups={groups}
-            onUpdateTube={onUpdateTube}
-          />
-        ))}
-      </div>
+      {!collapsed && (
+        <div className={styles.groupBoxContent}>
+          {tubes.length === 0 ? (
+            <div className={styles.groupEmpty}>暂无试剂</div>
+          ) : (
+            tubes.map((tube: any) => (
+              <TubeCard 
+                key={tube.id}
+                tube={tube}
+                onDelete={() => onDeleteTube(tube.id)}
+                onStatusChange={(status: string) => onStatusChange(tube.id, status)}
+                onEdit={() => onEditTube(tube)}
+                onAddToExperiment={() => onAddToExperiment(tube)}
+                hasExperiment={hasExperiment}
+                groups={groups}
+                onUpdateTube={onUpdateTube}
+                flashTarget={flashTarget}
+                onFlashDone={onFlashDone}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -400,7 +514,7 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
   const [color, setColor] = useState(group.color)
   const [notes, setNotes] = useState(group.notes || '')
   
-  const presetColors = ['#e0e7ff', '#fce7f3', '#dbeafe', '#d1fae5', '#fef3c7', '#ede9fe', '#ffe4e6', '#e0f2fe']
+  const presetColors = GROUP_PRESET_COLORS
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

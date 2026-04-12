@@ -354,6 +354,7 @@
 .groupBoxHeader {
   padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .groupBoxTitleRow {
@@ -385,6 +386,34 @@
   font-size: 13px;
   color: var(--text-muted);
   margin-left: var(--spacing-sm);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupCollapseBtn {
+  font-size: 12px;
+  padding: 2px 10px;
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.groupCollapseBtn:hover {
+  background: var(--bg-color);
+  color: var(--text-primary);
+}
+
+.groupEmpty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 14px;
 }
 
 .groupBoxContent {
@@ -406,17 +435,18 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 2px solid rgba(0,0,0,0.1);
   cursor: pointer;
 }
 
 .colorOption:hover {
-  border-color: var(--text-muted);
+  border-color: #000;
+  transform: scale(1.1);
 }
 
 .colorOptionActive {
-  border-color: var(--primary-color) !important;
-  box-shadow: 0 0 0 2px var(--primary-color);
+  border-color: #fff !important;
+  box-shadow: 0 0 0 2px #000;
 }
 
 .colorInput {
@@ -443,4 +473,83 @@
 .formActionsRight {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+/* 搜索框 */
+.searchWrapper {
+  position: relative;
+}
+
+.searchInput {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--surface-color);
+  width: 200px;
+  font-size: 14px;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  width: 260px;
+}
+
+.searchDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.searchResultItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.searchResultItem:hover {
+  background: var(--bg-color);
+}
+
+.searchResultIcon {
+  flex-shrink: 0;
+}
+
+.searchResultName {
+  font-weight: 500;
+}
+
+.searchResultSub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.searchEmpty {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* 红色闪烁动画 */
+@keyframes flashRed {
+  0%, 100% { background-color: inherit; }
+  50% { background-color: rgba(239, 68, 68, 0.25); }
+}
+
+.flashAnimation {
+  animation: flashRed 0.4s ease-in-out 3;
 }
