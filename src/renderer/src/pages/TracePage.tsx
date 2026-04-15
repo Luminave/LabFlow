@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getAllTubeHistories } from '../stores/experimentStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
+import { useWarehouseStore } from '../stores/warehouseStore'
 import styles from './TracePage.module.css'
 
 interface TubeHistory {
@@ -55,15 +56,25 @@ export default function TracePage() {
   const [searchText, setSearchText] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const { loadColors } = useSubstanceColorStore()
+  const { tubes: warehouseTubes, fetchTubes } = useWarehouseStore()
+  
+  useEffect(() => {
+    fetchTubes()
+    loadColors()
+  }, [fetchTubes, loadColors])
   
   useEffect(() => {
     const histories = getAllTubeHistories()
+    // 建立仓库试管名称映射（以仓库中的名称为准）
+    const nameMap = new Map(warehouseTubes.map(t => [t.id, t.name]))
     // 过滤掉缓冲液类型和上样类型的试管
     const tubeList = Array.from(histories.values()).filter(tube => 
       tube.tubeType !== 'buffer' && tube.tubeType !== 'sample'
-    )
+    ).map(tube => ({
+      ...tube,
+      tubeName: nameMap.get(tube.tubeId) || tube.tubeName
+    }))
     setTubes(tubeList)
-    loadColors()
     
     // 如果 URL 指定了 tubeId，自动选中
     const tubeId = searchParams.get('tubeId')
@@ -73,7 +84,7 @@ export default function TracePage() {
         setSelectedTube(tube)
       }
     }
-  }, [searchParams, loadColors])
+  }, [searchParams, warehouseTubes])
   
   // 筛选和搜索
   const filteredTubes = tubes.filter(tube => {
