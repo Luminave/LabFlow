@@ -4,6 +4,8 @@ import { useWarehouseStore } from '../stores/warehouseStore'
 import { useExperimentStore } from '../stores/experimentStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
 import { useGroupStore, GROUP_PRESET_COLORS } from '../stores/groupStore'
+import { useI18nStore } from '../stores/i18nStore'
+import { t } from '../i18n/translations'
 import { TubeType, TubeStatus, VolumeUnit, ConcentrationUnit, TubeGroup } from '@shared/types'
 import styles from './WarehousePage.module.css'
 
@@ -35,6 +37,7 @@ export default function WarehousePage() {
   const { currentExperiment, addSourceTube, currentTubes } = useExperimentStore()
   const { loadColors } = useSubstanceColorStore()
   const { groups, addGroup, updateGroup, loadGroups, generateGroupName } = useGroupStore()
+  const { language } = useI18nStore()
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingTube, setEditingTube] = useState<any>(null)
   const [editingGroup, setEditingGroup] = useState<TubeGroup | null>(null)
@@ -118,7 +121,7 @@ export default function WarehousePage() {
     for (const tube of tubes) {
       if (tube.groupId && hiddenGroupIds.has(tube.groupId)) continue
       if (tube.name.toLowerCase().includes(q)) {
-        results.push({ type: 'tube', id: tube.id, name: tube.name, subtitle: tube.type === 'buffer' ? '缓冲液' : tube.type === 'source' ? '原料' : '中间产物', groupId: tube.groupId })
+        results.push({ type: 'tube', id: tube.id, name: tube.name, subtitle: tube.type === 'buffer' ? (language === 'zh' ? '缓冲液' : 'Buffer') : tube.type === 'source' ? (language === 'zh' ? '原料' : 'Source') : (language === 'zh' ? '中间产物' : 'Intermediate'), groupId: tube.groupId })
       }
     }
     
@@ -216,19 +219,19 @@ export default function WarehousePage() {
     // 添加到实验（中间产物自动勾选"作为原料"）
     const tubeToAdd = tube.type === 'intermediate' ? { ...tube, asSource: true } : tube
     addSourceTube(tubeToAdd)
-    alert(`已将 ${tube.name} 添加到当前实验`)
+    alert(`${language === 'zh' ? '已将' : 'Added'} ${tube.name} ${language === 'zh' ? '添加到当前实验' : 'to current experiment'}`)
   }
   
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>试剂仓库</h1>
+        <h1 className={styles.title}>{t('warehouse.title', language)}</h1>
         <div className={styles.headerButtons}>
           <div className={styles.searchWrapper}>
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="搜索分组或试剂..."
+              placeholder={language === 'zh' ? '搜索分组或试剂...' : 'Search groups or reagents...'}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -249,18 +252,18 @@ export default function WarehousePage() {
             )}
             {searchResults && searchResults.length === 0 && searchQuery.trim() && (
               <div className={styles.searchDropdown}>
-                <div className={styles.searchEmpty}>无匹配结果</div>
+                <div className={styles.searchEmpty}>{language === 'zh' ? '无匹配结果' : 'No results'}</div>
               </div>
             )}
           </div>
           <button className={styles.toggleHiddenBtn} onClick={() => setShowHidden(!showHidden)}>
-            {showHidden ? '🙈 不显示隐藏的分组' : '👁️ 显示隐藏的分组'}
+            {showHidden ? (language === 'zh' ? '🙈 不显示隐藏的分组' : '🙈 Hide hidden groups') : (language === 'zh' ? '👁️ 显示隐藏的分组' : '👁️ Show hidden groups')}
           </button>
           <button className={styles.addGroupButton} onClick={handleAddGroup}>
-            📁 新增分组
+            📁 {language === 'zh' ? '新增分组' : 'New Group'}
           </button>
           <button className={styles.addButton} onClick={() => setShowAddForm(true)}>
-            + 添加试剂
+            + {language === 'zh' ? '添加试剂' : 'Add Reagent'}
           </button>
         </div>
       </header>
@@ -275,12 +278,12 @@ export default function WarehousePage() {
       
       <div className={styles.tubeList} ref={tubeListRef}>
         {loading ? (
-          <div className={styles.empty}>加载中...</div>
+          <div className={styles.empty}>{language === 'zh' ? '加载中...' : 'Loading...'}</div>
         ) : tubes.length === 0 && groups.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>📦</div>
-            <p>仓库为空</p>
-            <p className={styles.emptyHint}>点击上方按钮添加第一个试剂</p>
+            <p>{language === 'zh' ? '仓库为空' : 'Warehouse is empty'}</p>
+            <p className={styles.emptyHint}>{language === 'zh' ? '点击上方按钮添加第一个试剂' : 'Click above button to add first reagent'}</p>
           </div>
         ) : (
           groupedTubes.map(({ group, tubes: groupTubes }) => (
@@ -365,6 +368,7 @@ export default function WarehousePage() {
 
 function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment, groups, onUpdateTube, flashTarget, onFlashDone }: any) {
   const navigate = useNavigate()
+  const { language } = useI18nStore()
   const statusColors: Record<string, string> = {
     active: '#10b981',
     depleted: '#f59e0b',
@@ -372,15 +376,15 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
   }
   
   const statusLabels: Record<string, string> = {
-    active: '可用',
-    depleted: '不足',
-    discarded: '已弃'
+    active: language === 'zh' ? '可用' : 'Active',
+    depleted: language === 'zh' ? '不足' : 'Low',
+    discarded: language === 'zh' ? '已弃' : 'Discarded'
   }
   
   const typeLabels: Record<string, string> = {
-    source: '📦 原料',
-    buffer: '💧 缓冲液',
-    intermediate: '🧪 中间产物'
+    source: t('tube.source', language),
+    buffer: t('tube.buffer', language),
+    intermediate: t('tube.intermediate', language)
   }
   
   const isFlashing = flashTarget === tube.id
@@ -395,26 +399,26 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
           onChange={(e) => onStatusChange(e.target.value)}
           style={{ backgroundColor: statusColors[tube.status] }}
         >
-          <option value="active">可用</option>
-          <option value="depleted">不足</option>
-          <option value="discarded">已弃</option>
+          <option value="active">{language === 'zh' ? '可用' : 'Active'}</option>
+          <option value="depleted">{language === 'zh' ? '不足' : 'Low'}</option>
+          <option value="discarded">{language === 'zh' ? '已弃' : 'Discarded'}</option>
         </select>
       </div>
       
       <div className={styles.tubeBody}>
         <div className={styles.tubeInfo}>
-          <span className={styles.label}>类型:</span>
+          <span className={styles.label}>{language === 'zh' ? '类型:' : 'Type:'}</span>
           <span>{typeLabels[tube.type] || tube.type}</span>
         </div>
         
         <div className={styles.tubeInfo}>
-          <span className={styles.label}>体积:</span>
+          <span className={styles.label}>{language === 'zh' ? '体积:' : 'Volume:'}</span>
           <span>{tube.remainingVolume === Infinity ? '∞' : `${tube.remainingVolume} / ${tube.totalVolume === Infinity ? '∞' : tube.totalVolume}`} {tube.totalVolumeUnit}</span>
         </div>
         
         {tube.type !== 'buffer' && (
           <div className={styles.tubeInfo}>
-            <span className={styles.label}>物质:</span>
+            <span className={styles.label}>{language === 'zh' ? '物质:' : 'Substances:'}</span>
             <div className={styles.substances}>
               {tube.substances.map((s: any, i: number) => (
                 <SubstanceDisplay 
@@ -430,27 +434,27 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
         
         {tube.storageLocation && (
           <div className={styles.tubeInfo}>
-            <span className={styles.label}>位置:</span>
+            <span className={styles.label}>{language === 'zh' ? '位置:' : 'Location:'}</span>
             <span>{tube.storageLocation}</span>
           </div>
         )}
         
         {tube.storageCondition && (
           <div className={styles.tubeInfo}>
-            <span className={styles.label}>条件:</span>
+            <span className={styles.label}>{language === 'zh' ? '条件:' : 'Condition:'}</span>
             <span>{tube.storageCondition}</span>
           </div>
         )}
         
         {/* 分组选择器 */}
         <div className={styles.tubeInfo}>
-          <span className={styles.label}>分组:</span>
+          <span className={styles.label}>{language === 'zh' ? '分组:' : 'Group:'}</span>
           <select
             className={styles.statusSelect}
             value={tube.groupId || ''}
             onChange={(e) => onUpdateTube(tube.id, { groupId: e.target.value || undefined })}
           >
-            <option value="">未分组</option>
+            <option value="">{language === 'zh' ? '未分组' : 'Ungrouped'}</option>
             {groups.map((g: TubeGroup) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
@@ -463,17 +467,17 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
           <button 
             className={styles.addBtn} 
             onClick={onAddToExperiment}
-            title={hasExperiment ? "添加到当前实验" : "请先创建实验"}
+            title={hasExperiment ? (language === 'zh' ? '添加到当前实验' : 'Add to current experiment') : (language === 'zh' ? '请先创建实验' : 'Create experiment first')}
           >
-            ➕ 实验
+            ➕ {language === 'zh' ? '实验' : 'Experiment'}
           </button>
         )}
         <button className={styles.actionBtn} onClick={onEdit}>
-          ✏️ 编辑
+          ✏️ {language === 'zh' ? '编辑' : 'Edit'}
         </button>
         {tube.type !== 'buffer' && (
           <button className={styles.actionBtn} onClick={() => navigate(`/trace?tubeId=${tube.id}`)}>
-            🔍 溯源
+            🔍 {language === 'zh' ? '溯源' : 'Trace'}
           </button>
         )}
         <button className={styles.actionBtn} onClick={onDelete}>

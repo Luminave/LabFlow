@@ -168,7 +168,7 @@ export default function ExperimentPage() {
             tubeId: tube.id,
             tubeName: tube.name,
             type: 'volume_exceed',
-            message: `原料试管输出体积(${outVolume.toFixed(2)})大于可用体积(${availableVolume.toFixed(2)})`
+            message: `${language === 'zh' ? '原料试管输出体积' : 'Source output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于可用体积' : 'exceeds available'}(${availableVolume.toFixed(2)})`
           })
         }
       } else if (tube.type === 'intermediate') {
@@ -184,7 +184,7 @@ export default function ExperimentPage() {
               tubeId: tube.id,
               tubeName: tube.name,
               type: 'volume_exceed',
-              message: `中间产物试管输出体积(${outVolume.toFixed(2)})大于仓库中可用体积(${whTube.remainingVolume.toFixed(2)})`
+              message: `${language === 'zh' ? '中间产物试管输出体积' : 'Intermediate output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于仓库中可用体积' : 'exceeds warehouse available'}(${whTube.remainingVolume.toFixed(2)})`
             })
           }
         } else {
@@ -194,7 +194,7 @@ export default function ExperimentPage() {
               tubeId: tube.id,
               tubeName: tube.name,
               type: 'volume_exceed',
-              message: `中间产物试管输出体积(${outVolume.toFixed(2)})大于输入体积(${inVolume.toFixed(2)})`
+              message: `${language === 'zh' ? '中间产物试管输出体积' : 'Intermediate output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于输入体积' : 'exceeds input volume'}(${inVolume.toFixed(2)})`
             })
           }
         }
@@ -224,7 +224,7 @@ export default function ExperimentPage() {
           tubeId: tube.id,
           tubeName: tube.name,
           type: 'buffer_missing',
-          message: `中间产物需要缓冲液补足(${(targetVolume - inVolume).toFixed(2)}),但未连接缓冲液`
+          message: `${language === 'zh' ? '中间产物需要缓冲液补足' : 'Intermediate needs buffer fill'}(${(targetVolume - inVolume).toFixed(2)}),${language === 'zh' ? '但未连接缓冲液' : 'but no buffer connected'}`
         })
       }
     }
@@ -255,7 +255,7 @@ export default function ExperimentPage() {
             tubeId: tube.id,
             tubeName: tube.name,
             type: 'substance_source_missing',
-            message: `需要成分"${targetSub.name}",但没有连线到含有该成分的源试管`
+            message: `${language === 'zh' ? '需要成分' : 'Needs substance'}"${targetSub.name}",${language === 'zh' ? '但没有连线到含有该成分的源试管' : 'but no connection to tube containing it'}`
           })
         }
       }
@@ -291,7 +291,7 @@ export default function ExperimentPage() {
             tubeId: tube.id,
             tubeName: tube.name,
             type: 'calculation_error',
-            message: `目标体积(${tube.totalVolume})与实际输入体积(${totalInputFromConnections.toFixed(2)})不匹配`
+            message: `${language === 'zh' ? '目标体积' : 'Target volume'}(${tube.totalVolume})${language === 'zh' ? '与实际输入体积' : 'vs actual input'}(${totalInputFromConnections.toFixed(2)})${language === 'zh' ? '不匹配' : 'mismatch'}`
           })
         }
       }
@@ -305,7 +305,7 @@ export default function ExperimentPage() {
             tubeId: tube.id,
             tubeName: tube.name,
             type: 'zero_concentration',
-            message: `定义了成分"${sub.name}"但浓度为0`
+            message: `${language === 'zh' ? '定义了成分' : 'Substance'}"${sub.name}"${language === 'zh' ? '但浓度为0' : 'has zero concentration'}`
           })
         }
       }
@@ -323,14 +323,14 @@ export default function ExperimentPage() {
           tubeId: tube.id,
           tubeName: tube.name,
           type: 'config_order_missing',
-          message: '中间产物试管未设置配置序号（讲述者需要）'
+          message: language === 'zh' ? '中间产物试管未设置配置序号（讲述者需要）' : 'Intermediate tube has no config order (required by Narrator)'
         })
       } else if (tube.configOrder <= 0 || !Number.isInteger(tube.configOrder)) {
         errors.push({
           tubeId: tube.id,
           tubeName: tube.name,
           type: 'config_order_invalid',
-          message: `配置序号必须是正整数，当前值: ${tube.configOrder}`
+          message: `${language === 'zh' ? '配置序号必须是正整数，当前值:' : 'Config order must be positive integer, current:'} ${tube.configOrder}`
         })
       }
     }
@@ -350,7 +350,7 @@ export default function ExperimentPage() {
           tubeId: '',
           tubeName: tubeNames.join(', '),
           type: 'config_order_duplicate',
-          message: `配置序号 ${order} 重复使用（${tubeNames.join(', ')}）`
+          message: `${language === 'zh' ? '配置序号' : 'Config order'} ${order} ${language === 'zh' ? '重复使用（' : 'duplicated ('}${tubeNames.join(', ')}${language === 'zh' ? '）' : ')'}`
         })
       }
     }
@@ -364,7 +364,7 @@ export default function ExperimentPage() {
             tubeId: '',
             tubeName: '',
             type: 'config_order_gap',
-            message: `配置序号有跳过：从 ${orders[i - 1]} 跳到 ${orders[i]}`
+            message: `${language === 'zh' ? '配置序号有跳过：从' : 'Config order gap: from'} ${orders[i - 1]} ${language === 'zh' ? '跳到' : 'to'} ${orders[i]}`
           })
         }
       }
@@ -377,7 +377,7 @@ export default function ExperimentPage() {
   // 清空所有讲述者序号
   const handleClearConfigOrders = () => {
     if (!currentExperiment || isReadOnly) return
-    if (!confirm('确定清空当前工程中所有试管的讲述者序号？')) return
+    if (!confirm(language === 'zh' ? '确定清空当前工程中所有试管的讲述者序号？' : 'Clear all narrator orders in this project?')) return
 
     const newTubes = currentTubes.map(tube => {
       if (tube.configOrder) {
@@ -434,7 +434,7 @@ export default function ExperimentPage() {
 
     // 更新实验数据
     set({ currentTubes: newTubes })
-    alert('工程已刷新！')
+    alert(language === 'zh' ? '工程已刷新！' : 'Project refreshed!')
   }
   useEffect(() => {
     fetchExperiments()
@@ -606,7 +606,7 @@ export default function ExperimentPage() {
   // 删除连接线
   const handleDeleteEdge = useCallback(() => {
     if (!editingEdge) return
-    if (!confirm('确定删除这条连接线?')) return
+    if (!confirm(language === 'zh' ? '确定删除这条连接线?' : 'Delete this connection?')) return
     removeConnection(editingEdge.id)
     setEdges(eds => eds.filter(e => e.id !== editingEdge.id))
     setEditingEdge(null)
@@ -781,7 +781,7 @@ export default function ExperimentPage() {
       t.id !== editingTube.id && t.name.toLowerCase() === trimmedName.toLowerCase()
     )
     if (duplicateName) {
-      alert(`试管名称 "${trimmedName}" 已存在,请使用其他名称`)
+      alert(`${language === 'zh' ? '试管名称' : 'Tube name'} "${trimmedName}" ${language === 'zh' ? '已存在,请使用其他名称' : 'already exists, please use another name'}`)
       return
     }
 
@@ -900,12 +900,12 @@ export default function ExperimentPage() {
     }
 
     if (hasMissingSource) {
-      if (!silent) alert(`以下物质找不到源试管:${missingSubstances.join(', ')}\n请确保已从包含这些物质的试管连线到此试管。`)
+      if (!silent) alert(`${language === 'zh' ? '以下物质找不到源试管:' : 'Cannot find source for:'} ${missingSubstances.join(', ')}\n${language === 'zh' ? '请确保已从包含这些物质的试管连线到此试管。' : 'Make sure to connect from tubes containing these substances.'}`)
       return false
     }
 
     if (sourceTubeVolumes.size === 0) {
-      if (!silent) alert('没有可计算的物质,请先添加目标物质浓度')
+      if (!silent) alert(language === 'zh' ? '没有可计算的物质,请先添加目标物质浓度' : 'No substances to calculate, please add target substance concentrations first')
       return false
     }
 
@@ -913,7 +913,7 @@ export default function ExperimentPage() {
     sourceTubeVolumes.forEach(vol => totalSubstanceVolume += vol)
 
     if (totalSubstanceVolume > targetVolume) {
-      if (!silent) alert(`源试管总体积 (${totalSubstanceVolume.toFixed(1)} μL) 超过目标体积 (${targetVolume} μL)!\n请降低目标物质浓度或增加目标体积。`)
+      if (!silent) alert(`${language === 'zh' ? '源试管总体积' : 'Source volume'} (${totalSubstanceVolume.toFixed(1)} μL) ${language === 'zh' ? '超过目标体积' : 'exceeds target'} (${targetVolume} μL)!\n${language === 'zh' ? '请降低目标物质浓度或增加目标体积。' : 'Please reduce target concentration or increase target volume.'}`)
       return false
     }
 
@@ -1023,7 +1023,7 @@ export default function ExperimentPage() {
     }
 
     if (!silent) {
-      alert(`计算完成!\n源试管总体积: ${totalSubstanceVolume.toFixed(1)} μL\n缓冲液体积: ${targetVolume > totalSubstanceVolume ? (targetVolume - totalSubstanceVolume).toFixed(1) : 0} μL`)
+      alert(`${language === 'zh' ? '计算完成!' : 'Calculation complete!'}\n${language === 'zh' ? '源试管总体积:' : 'Source volume:'} ${totalSubstanceVolume.toFixed(1)} μL\n${language === 'zh' ? '缓冲液体积:' : 'Buffer volume:'} ${targetVolume > totalSubstanceVolume ? (targetVolume - totalSubstanceVolume).toFixed(1) : 0} μL`)
     }
 
     return true
@@ -1109,7 +1109,7 @@ export default function ExperimentPage() {
     if (isReadOnly) return
 
     const sampleCount = currentTubes.filter(t => t.type === 'sample').length + 1
-    const baseName = `上样 ${sampleCount}`
+    const baseName = `${language === 'zh' ? '上样' : 'Sample'} ${sampleCount}`
     const name = quickNaming ? `${experimentDate}-${baseName}` : baseName
 
     const newTube: Tube = {
@@ -1134,7 +1134,7 @@ export default function ExperimentPage() {
     if (isReadOnly) return
 
     const wasteCount = currentTubes.filter(t => t.type === 'waste').length + 1
-    const baseName = `耗损 ${wasteCount}`
+    const baseName = `${language === 'zh' ? '耗损' : 'Waste'} ${wasteCount}`
     const name = quickNaming ? `${experimentDate}-${baseName}` : baseName
 
     const newTube: Tube = {
@@ -1178,28 +1178,28 @@ export default function ExperimentPage() {
   // 另存为
   const handleSaveAs = async () => {
     if (!saveAsName.trim()) {
-      alert('请输入新名称')
+      alert(t('alert.enterNewName', language))
       return
     }
     await saveAsExperiment(saveAsName)
     setShowSaveAs(false)
     setSaveAsName('')
-    alert('实验已另存为:' + saveAsName)
+    alert(t('alert.savedAs', language) + saveAsName)
   }
 
   // 创建耗损实验
   const handleCreateWasteExperiment = async () => {
     if (!experimentName.trim()) {
-      alert('请输入实验名称')
+      alert(t('alert.enterName', language))
       return
     }
 
-    await createNewExperiment(experimentName, '耗损实验')
+    await createNewExperiment(experimentName, language === 'zh' ? '耗损实验' : 'Waste Experiment')
 
     // 创建默认的耗损试管
     const wasteTube: Tube = {
       id: crypto.randomUUID(),
-      name: '耗损',
+      name: language === 'zh' ? '耗损' : 'Waste',
       type: 'waste',
       totalVolume: 0,
       totalVolumeUnit: 'μL',
@@ -1225,8 +1225,8 @@ export default function ExperimentPage() {
     const tube = currentTubes.find(t => t.id === tubeId)
     const isSource = tube?.type === 'source'
     const msg = isSource
-      ? '确定从当前工程中移除这个原料试管?\n\n注意:仅从当前工程移除,不会删除仓库中的试剂。'
-      : '确定删除这个试管?相关的移液连接也会被删除。'
+      ? language === 'zh' ? '确定从当前工程中移除这个原料试管?\n\n注意:仅从当前工程移除,不会删除仓库中的试剂。' : 'Remove this source tube from current project?\n\nNote: Only removed from project, not from warehouse.'
+      : t('alert.confirmDelete', language)
     if (!confirm(msg)) return
 
     // 删除相关连接
@@ -1248,9 +1248,9 @@ export default function ExperimentPage() {
   const handleCompleteExperiment = async () => {
     if (!currentExperiment) return
 
-    if (confirm('确定结束实验?\n\n所有修改将同步到试剂仓库:\n- 原料试管的剩余体积将更新\n- 中间产物将添加到仓库\n\n此操作不可撤销。')) {
+    if (confirm(t('alert.confirmEnd', language))) {
       await completeExperiment()
-      alert('实验已完成!改动已同步到试剂仓库。')
+      alert(t('alert.experimentSaved', language))
     }
   }
 
@@ -1269,7 +1269,7 @@ export default function ExperimentPage() {
 
   // 删除实验
   const handleDeleteExperiment = (id: string) => {
-    if (confirm('确定删除这个实验?此操作不可恢复。')) {
+    if (confirm(language === 'zh' ? '确定删除这个实验?此操作不可恢复。' : 'Delete this experiment? This cannot be undone.')) {
       deleteExperiment(id)
     }
   }
@@ -1397,7 +1397,7 @@ export default function ExperimentPage() {
                   </button>
 
                   <button className={styles.toolbarBtn} onClick={handleClearConfigOrders}>
-                    🧹 清空序号
+                    🧹 {language === 'zh' ? '清空序号' : 'Clear Orders'}
                   </button>
 
                   <button className={styles.toolbarBtnAccent} onClick={handleCompleteExperiment}>
@@ -1468,16 +1468,16 @@ export default function ExperimentPage() {
             <MiniMap />
             <Panel position="top-right">
               <div className={styles.helpPanel}>
-                <p>💡 操作提示:</p>
+                <p>💡 {language === 'zh' ? '操作提示:' : 'Tips:'}</p>
                 <ul>
-                  <li>拖拽试管移动位置</li>
-                  <li>从右侧圆点拖出连线</li>
-                  <li><strong>双击连线数字修改体积</strong></li>
-                  <li>点击试管查看/编辑参数</li>
-                  <li><strong>选中后按 Delete 删除</strong></li>
+                  <li>{language === 'zh' ? '拖拽试管移动位置' : 'Drag tubes to move'}</li>
+                  <li>{language === 'zh' ? '从右侧圆点拖出连线' : 'Drag from right handle to connect'}</li>
+                  <li><strong>{language === 'zh' ? '双击连线数字修改体积' : 'Double-click edge to edit volume'}</strong></li>
+                  <li>{language === 'zh' ? '点击试管查看/编辑参数' : 'Click tube to view/edit'}</li>
+                  <li><strong>{language === 'zh' ? '选中后按 Delete 删除' : 'Select + Delete to remove'}</strong></li>
                 </ul>
                 {isReadOnly && (
-                  <p className={styles.readOnlyHint}>🔒 此实验已{currentExperiment?.status === 'reverted' ? '回退' : '结束'},无法修改</p>
+                  <p className={styles.readOnlyHint}>🔒 {currentExperiment?.status === 'reverted' ? (language === 'zh' ? '此实验已回退,无法修改' : 'Experiment reverted, read only') : (language === 'zh' ? '此实验已结束,无法修改' : 'Experiment ended, read only')}</p>
                 )}
               </div>
             </Panel>
@@ -1485,8 +1485,8 @@ export default function ExperimentPage() {
         ) : (
           <div className={styles.empty}>
             <div className={styles.emptyIcon}>🔬</div>
-            <p>创建一个新实验开始模拟</p>
-            <p className={styles.emptyHint}>或点击"打开工程"继续之前的实验</p>
+            <p>{language === 'zh' ? '创建一个新实验开始模拟' : 'Create a new experiment to start'}</p>
+            <p className={styles.emptyHint}>{language === 'zh' ? '或点击"打开工程"继续之前的实验' : 'Or click "Open" to continue previous experiments'}</p>
           </div>
         )}
       </div>
@@ -1495,12 +1495,12 @@ export default function ExperimentPage() {
       {showExperimentManager && (
         <div className={styles.modal} onClick={() => { setShowExperimentManager(false); setExperimentSearch('') }}>
           <div className={styles.modalContentWide} onClick={e => e.stopPropagation()}>
-            <h2 className={styles.modalTitle}>工程管理</h2>
+            <h2 className={styles.modalTitle}>{t('modal.projectManagement', language)}</h2>
 
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="🔍 搜索工程名称..."
+              placeholder={language === 'zh' ? '🔍 搜索工程名称...' : '🔍 Search project name...'}
               value={experimentSearch}
               onChange={e => setExperimentSearch(e.target.value)}
               autoFocus
@@ -1512,33 +1512,33 @@ export default function ExperimentPage() {
                   ? experiments.filter(exp => exp.name.toLowerCase().includes(experimentSearch.trim().toLowerCase()))
                   : experiments
                 if (filtered.length === 0) {
-                  return <div className={styles.emptyHint}>{experimentSearch.trim() ? '没有匹配的工程' : '暂无保存的工程'}</div>
+                  return <div className={styles.emptyHint}>{experimentSearch.trim() ? (language === 'zh' ? '没有匹配的工程' : 'No matching projects') : (language === 'zh' ? '暂无保存的工程' : 'No saved projects')}</div>
                 }
                 return filtered.map(exp => (
                   <div key={exp.id} className={styles.experimentItem}>
                     <div className={styles.experimentItemInfo}>
                       <h3>
                         {exp.name}
-                        {exp.isWaste && <span className={styles.wasteTag}>耗损</span>}
+                        {exp.isWaste && <span className={styles.wasteTag}>{t('waste.tag', language)}</span>}
                       </h3>
                       <div className={styles.experimentItemMeta}>
                         <span className={`${styles.statusTag} ${styles[exp.status]}`}>
-                          {exp.status === 'draft' ? '草稿' :
-                           exp.status === 'completed' ? '已完成' : '已回退'}
+                          {exp.status === 'draft' ? t('status.draft', language) :
+                           exp.status === 'completed' ? t('status.completed', language) : t('status.reverted', language)}
                         </span>
                         <span>{new Date(exp.updatedAt).toLocaleString('zh-CN')}</span>
-                        <span>{exp.tubes?.length || 0} 个试管</span>
+                        <span>{exp.tubes?.length || 0} {language === 'zh' ? '个试管' : 'tubes'}</span>
                       </div>
                     </div>
                     <div className={styles.experimentItemActions}>
                       <button onClick={() => handleOpenExperiment(exp.id)}>
-                        打开
+                        {language === 'zh' ? '打开' : 'Open'}
                       </button>
                       <button
                         className={styles.deleteBtn}
                         onClick={() => handleDeleteExperiment(exp.id)}
                       >
-                        删除
+                        {language === 'zh' ? '删除' : 'Delete'}
                       </button>
                     </div>
                   </div>
@@ -1548,7 +1548,7 @@ export default function ExperimentPage() {
 
             <div className={styles.formActions}>
               <button className={styles.cancelBtn} onClick={() => { setShowExperimentManager(false); setExperimentSearch('') }}>
-                关闭
+                {language === 'zh' ? '关闭' : 'Close'}
               </button>
             </div>
           </div>
@@ -1559,20 +1559,20 @@ export default function ExperimentPage() {
       {showSaveAs && (
         <div className={styles.modal} onClick={() => setShowSaveAs(false)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h3>另存为</h3>
+            <h3>{t('modal.saveAs', language)}</h3>
             <input
               type="text"
-              placeholder="输入新工程名称..."
+              placeholder={language === 'zh' ? '输入新工程名称...' : 'Enter new project name...'}
               value={saveAsName}
               onChange={(e) => setSaveAsName(e.target.value)}
               autoFocus
             />
             <div className={styles.formActions}>
               <button className={styles.cancelBtn} onClick={() => setShowSaveAs(false)}>
-                取消
+                {t('tubeDetail.cancel', language)}
               </button>
               <button className={styles.submitBtn} onClick={handleSaveAs}>
-                保存
+                {t('tubeDetail.save', language)}
               </button>
             </div>
           </div>
@@ -1583,7 +1583,7 @@ export default function ExperimentPage() {
       {showTubeSelector && (
         <div className={styles.modal} onClick={() => setShowTubeSelector(false)}>
           <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h3>选择试剂</h3>
+            <h3>{t('modal.selectTube', language)}</h3>
             <div className={styles.tubeList}>
               {sourceTubes.map(tube => (
                 <div
@@ -1603,11 +1603,11 @@ export default function ExperimentPage() {
                 </div>
               ))}
               {sourceTubes.length === 0 && (
-                <p className={styles.emptyHint}>仓库中没有可用试剂</p>
+                <p className={styles.emptyHint}>{language === 'zh' ? '仓库中没有可用试剂' : 'No available reagents in warehouse'}</p>
               )}
             </div>
             <button className={styles.closeBtn} onClick={() => setShowTubeSelector(false)}>
-              关闭
+              {t('tubeDetail.close', language)}
             </button>
           </div>
         </div>
@@ -1620,7 +1620,7 @@ export default function ExperimentPage() {
             <div className={styles.modalHeader}>
               <h3>{editingTube.name}</h3>
               <button className={styles.traceBtn} onClick={handleGoToTrace}>
-                🔍 溯源
+                🔍 {t('tubeDetail.trace', language)}
               </button>
             </div>
 
@@ -1638,7 +1638,7 @@ export default function ExperimentPage() {
             )}
             {isReadOnly && editingTube.type === 'intermediate' && editingTube.tubeNumber && (
               <div className={styles.formGroup}>
-                <label className={styles.formLabel}>管号</label>
+                <label className={styles.formLabel}>{language === 'zh' ? '管号' : 'Tube Number'}</label>
                 <div className={styles.readOnlyValue}>{editingTube.tubeNumber}</div>
               </div>
             )}
@@ -1681,7 +1681,7 @@ export default function ExperimentPage() {
 
                 <div className={styles.formRow}>
                   <div className={styles.formGroup}>
-                    <label>目标体积</label>
+                    <label>{t('tubeDetail.targetVolume', language)}</label>
                     <input
                       type="number"
                       value={editFormData.targetVolume}
@@ -1692,7 +1692,7 @@ export default function ExperimentPage() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label>单位</label>
+                    <label>{t('tubeDetail.unit', language)}</label>
                     <select
                       value={editFormData.targetVolumeUnit}
                       onChange={(e) => setEditFormData({ ...editFormData, targetVolumeUnit: e.target.value as VolumeUnit })}
@@ -1708,7 +1708,7 @@ export default function ExperimentPage() {
                 {editingTube.type === 'intermediate' && !isReadOnly && (
                   <>
                     <div className={styles.formGroup}>
-                      <label>目标物质浓度(设置后点击"自动计算"更新连线)</label>
+                      <label>{t('tubeDetail.substanceConcentration', language)}</label>
                       <div className={styles.substanceList}>
                         {editFormData.substances.map((sub, i) => (
                           <div key={i} className={styles.substanceItem}>
@@ -1720,7 +1720,7 @@ export default function ExperimentPage() {
                                 newSubs[i].name = e.target.value
                                 setEditFormData({ ...editFormData, substances: newSubs })
                               }}
-                              placeholder="物质名称"
+                              placeholder={t('tubeDetail.substanceName', language)}
                             />
                             <input
                               type="number"
@@ -1730,7 +1730,7 @@ export default function ExperimentPage() {
                                 newSubs[i].concentration = Number(e.target.value)
                                 setEditFormData({ ...editFormData, substances: newSubs })
                               }}
-                              placeholder="浓度"
+                              placeholder={t('tubeDetail.concentration', language)}
                             />
                             <select
                               value={sub.concentrationUnit}
@@ -1763,23 +1763,23 @@ export default function ExperimentPage() {
                           substances: [...editFormData.substances, { name: '', concentration: 0, concentrationUnit: 'μM' }]
                         })}
                       >
-                        + 添加物质
+                        {t('tubeDetail.addSubstance', language)}
                       </button>
                     </div>
 
                     <div className={styles.formGroup}>
-                      <label>缓冲液补足</label>
+                      <label>{t('tubeDetail.bufferFill', language)}</label>
                       <select
                         value={editFormData.selectedBuffer}
                         onChange={(e) => setEditFormData({ ...editFormData, selectedBuffer: e.target.value })}
                       >
-                        <option value="">不使用缓冲液</option>
+                        <option value="">{t('tubeDetail.noBuffer', language)}</option>
                         {bufferTubes.map(t => (
                           <option key={t.id} value={t.id}>{t.name}</option>
                         ))}
                       </select>
                       {bufferTubes.length === 0 && (
-                        <p className={styles.hint}>请先在仓库中创建缓冲液</p>
+                        <p className={styles.hint}>{t('tubeDetail.createBufferHint', language)}</p>
                       )}
                     </div>
 
@@ -1793,43 +1793,43 @@ export default function ExperimentPage() {
                             onChange={(e) => setEditFormData({ ...editFormData, asSource: e.target.checked })}
                             disabled={isReadOnly}
                           />
-                          作为原料(上次实验剩下的试剂)
+                          {t('tubeDetail.asSource', language)}
                         </label>
-                        <p className={styles.hint}>选中后,检查时将赦免此试管的成分输入问题</p>
+                        <p className={styles.hint}>{t('tubeDetail.asSourceHint', language)}</p>
                       </div>
                     )}
 
                     {/* 配置序号 - 中间产物试管显示 */}
                     {editingTube.type === 'intermediate' && !editFormData.asSource && (
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>配置序号</label>
+                        <label className={styles.formLabel}>{language === 'zh' ? '配置序号' : 'Config Order'}</label>
                         <input
                           type="number"
                           className={styles.formInput}
                           value={editFormData.configOrder}
                           onChange={(e) => setEditFormData({ ...editFormData, configOrder: e.target.value })}
-                          placeholder="正整数,用于讲述者排序"
+                          placeholder={language === 'zh' ? '正整数,用于讲述者排序' : 'Positive integer for narrator ordering'}
                           min="1"
                           step="1"
                           disabled={isReadOnly}
                         />
-                        <p className={styles.hint}>按序号从小到大生成实验步骤(讲述者功能)</p>
+                        <p className={styles.hint}>{language === 'zh' ? '按序号从小到大生成实验步骤(讲述者功能)' : 'Generate experiment steps in order (Narrator feature)'}</p>
                       </div>
                     )}
 
                     {/* 管号 - 中间产物且非作为原料的试管显示 */}
                     {editingTube.type === 'intermediate' && !editFormData.asSource && !isReadOnly && (
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>管号</label>
+                        <label className={styles.formLabel}>{language === 'zh' ? '管号' : 'Tube Number'}</label>
                         <input
                           type="text"
                           className={styles.formInput}
                           value={editFormData.tubeNumber}
                           onChange={(e) => setEditFormData({ ...editFormData, tubeNumber: e.target.value })}
-                          placeholder="#1 (最多5个字符)"
+                          placeholder="#1 (max 5 chars)"
                           maxLength={5}
                         />
-                        <p className={styles.hint}>管号仅存储在当前实验工程中,默认以#开头</p>
+                        <p className={styles.hint}>{language === 'zh' ? '管号仅存储在当前实验工程中,默认以#开头' : 'Tube number is stored in project only, starts with #'}</p>
                       </div>
                     )}
                   </>
@@ -1843,20 +1843,20 @@ export default function ExperimentPage() {
                   className={styles.deleteTubeBtn}
                   onClick={() => handleDeleteTube(editingTube.id)}
                 >
-                  🗑️ {editingTube.type === 'source' ? '移除试管' : '删除试管'}
+                  🗑️ {editingTube.type === 'source' ? (language === 'zh' ? '移除试管' : 'Remove Tube') : t('tubeDetail.deleteTube', language)}
                 </button>
               )}
               <button className={styles.cancelBtn} onClick={() => setEditingTube(null)}>
-                {isReadOnly ? '关闭' : '取消'}
+                {isReadOnly ? t('tubeDetail.close', language) : t('tubeDetail.cancel', language)}
               </button>
               {editingTube.type === 'intermediate' && !isReadOnly && (
                 <button className={styles.calcBtn} onClick={handleAutoCalculate}>
-                  自动计算
+                  {t('tubeDetail.autoCalculate', language)}
                 </button>
               )}
               {!isReadOnly && (
                 <button className={styles.submitBtn} onClick={handleSaveTubeEdit}>
-                  保存
+                  {t('tubeDetail.save', language)}
                 </button>
               )}
             </div>
@@ -1869,11 +1869,11 @@ export default function ExperimentPage() {
         <div className={styles.modal} onClick={() => setEditingEdge(null)}>
           <div className={styles.editModalContent} onClick={e => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h3>移液连接线</h3>
+              <h3>{language === 'zh' ? '移液连接线' : 'Transfer Connection'}</h3>
             </div>
 
             <div className={styles.formGroup}>
-              <label>移液体积</label>
+              <label>{language === 'zh' ? '移液体积' : 'Transfer Volume'}</label>
               <div className={styles.formRow}>
                 <input
                   type="number"
@@ -1887,20 +1887,20 @@ export default function ExperimentPage() {
                   <option value="mL">mL</option>
                 </select>
               </div>
-              <p className={styles.hint}>体积编辑功能暂未开放</p>
+              <p className={styles.hint}>{language === 'zh' ? '体积编辑功能暂未开放' : 'Volume editing not yet available'}</p>
             </div>
 
             <div className={styles.formActions}>
               {!isReadOnly && (
                 <button className={styles.deleteTubeBtn} onClick={handleDeleteEdge}>
-                  🗑️ 删除连线
+                  🗑️ {language === 'zh' ? '删除连线' : 'Delete Connection'}
                 </button>
               )}
               <button className={styles.cancelBtn} onClick={() => setEditingEdge(null)}>
-                取消
+                {t('tubeDetail.cancel', language)}
               </button>
               <button className={styles.submitBtn} onClick={() => setEditingEdge(null)} disabled>
-                保存
+                {t('tubeDetail.save', language)}
               </button>
             </div>
           </div>
@@ -1911,10 +1911,10 @@ export default function ExperimentPage() {
       {showCheckResult && (
         <div className={styles.checkResultPanel}>
           <div className={styles.panelHeader}>
-            <h3>🔍 检查结果 {checkErrors.length > 0 && `(${checkErrors.length}个问题)`}</h3>
+            <h3>🔍 {t('check.title', language)} {checkErrors.length > 0 && `(${checkErrors.length}${t('check.problems', language)})`}</h3>
             <div className={styles.panelActions}>
               <button className={styles.recheckBtn} onClick={handleCheckExperiment}>
-                重新检查
+                {t('check.recheck', language)}
               </button>
               <button className={styles.closeResultBtn} onClick={() => setShowCheckResult(false)}>
                 ✕
@@ -1925,7 +1925,7 @@ export default function ExperimentPage() {
           <div className={styles.panelContent}>
             {checkErrors.length === 0 ? (
               <div className={styles.checkSuccess}>
-                ✅ 工程检查通过,没有发现问题!
+                {t('check.noErrors', language)}
               </div>
             ) : (
               <div className={styles.checkErrors}>
@@ -1934,11 +1934,11 @@ export default function ExperimentPage() {
                     <li key={index} className={styles.errorItem}>
                       <span className={styles.errorTube}>{error.tubeName}</span>
                       <span className={styles.errorType}>
-                        {error.type === 'volume_exceed' && '⚠️ 体积超出'}
-                        {error.type === 'buffer_missing' && '💧 缺少缓冲液'}
-                        {error.type === 'substance_source_missing' && '🔗 缺少成分来源'}
-                        {error.type === 'calculation_error' && '🔢 计算错误'}
-                        {error.type === 'zero_concentration' && '📊 浓度为0'}
+                        {error.type === 'volume_exceed' && t('error.volumeExceed', language)}
+                        {error.type === 'buffer_missing' && t('error.bufferMissing', language)}
+                        {error.type === 'substance_source_missing' && t('error.substanceSourceMissing', language)}
+                        {error.type === 'calculation_error' && t('error.calculationError', language)}
+                        {error.type === 'zero_concentration' && t('error.zeroConcentration', language)}
                       </span>
                       <span className={styles.errorMessage}>{error.message}</span>
                     </li>

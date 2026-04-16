@@ -1,9 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useExperimentStore } from '../stores/experimentStore'
+import { useI18nStore } from '../stores/i18nStore'
+import { t } from '../i18n/translations'
 import styles from './NarratorPage.module.css'
 
 export default function NarratorPage() {
   const { experiments, fetchExperiments } = useExperimentStore()
+  const { language } = useI18nStore()
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>('')
   const [narratedSteps, setNarratedSteps] = useState<string>('')
   const [copied, setCopied] = useState(false)
@@ -127,7 +130,7 @@ export default function NarratorPage() {
 
       // Step 标题
       const volumeStr = `${totalVolume}μL`
-      const substancesStr = substanceInfo.length > 0 ? substanceInfo.join(';') : '空'
+      const substancesStr = substanceInfo.length > 0 ? substanceInfo.join(';') : (language === 'zh' ? '空' : 'Empty')
       steps.push(`Step${stepIndex + 1}: ${getDisplayName(narratorTube)}   ${volumeStr}   (${substancesStr})`)
 
       // 小步骤（已按体积从大到小排序）
@@ -147,32 +150,32 @@ export default function NarratorPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>📖 讲述者</h1>
-        <p className={styles.subtitle}>选择实验工程，按配置序号生成实验操作步骤</p>
-        <p className={styles.hint}>💡 提示：回退的工程需要另存为新工程之后才能使用讲述者</p>
+        <h1 className={styles.title}>📖 {t('nav.narrator', language)}</h1>
+        <p className={styles.subtitle}>{language === 'zh' ? '选择实验工程，按配置序号生成实验操作步骤' : 'Select project, generate steps by config order'}</p>
+        <p className={styles.hint}>💡 {language === 'zh' ? '提示：回退的工程需要另存为新工程之后才能使用讲述者' : 'Tip: Reverted projects must be saved as new before using Narrator'}</p>
         <label className={styles.toggleLabel}>
           <input
             type="checkbox"
             checked={useTubeNumber}
             onChange={e => setUseTubeNumber(e.target.checked)}
           />
-          使用管号
+          {language === 'zh' ? '使用管号' : 'Use Tube Number'}
         </label>
       </header>
 
       <div className={styles.content}>
         {/* 实验选择区域 */}
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>1. 选择实验工程</h2>
+          <h2 className={styles.sectionTitle}>1. {language === 'zh' ? '选择实验工程' : 'Select Project'}</h2>
           <select
             className={styles.select}
             value={selectedExperimentId}
             onChange={e => setSelectedExperimentId(e.target.value)}
           >
-            <option value="">-- 请选择实验 --</option>
+            <option value="">-- {language === 'zh' ? '请选择实验' : 'Select Experiment'} --</option>
             {availableExperiments.map(exp => (
               <option key={exp.id} value={exp.id}>
-                {exp.name} [{exp.status === 'completed' ? '已完成' : '草稿'}] ({exp.completedAt ? new Date(exp.completedAt).toLocaleDateString('zh-CN') : new Date(exp.updatedAt).toLocaleDateString('zh-CN')})
+                {exp.name} [{exp.status === 'completed' ? t('status.completed', language) : t('status.draft', language)}] ({exp.completedAt ? new Date(exp.completedAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US') : new Date(exp.updatedAt).toLocaleDateString(language === 'zh' ? 'zh-CN' : 'en-US')})
               </option>
             ))}
           </select>
@@ -181,12 +184,12 @@ export default function NarratorPage() {
         {/* 试管列表显示 */}
         {selectedExperimentId && (
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>2. 试管配置顺序</h2>
+            <h2 className={styles.sectionTitle}>2. {language === 'zh' ? '试管配置顺序' : 'Tube Config Order'}</h2>
             {sortedTubes.length === 0 ? (
               <div className={styles.empty}>
                 <div className={styles.emptyIcon}>🧪</div>
-                <p>该实验没有中间产物试管</p>
-                <p className={styles.hint}>请先在实验模拟中配置试管的"配置序号"</p>
+                <p>{language === 'zh' ? '该实验没有中间产物试管' : 'No intermediate tubes in this experiment'}</p>
+                <p className={styles.hint}>{language === 'zh' ? '请先在实验模拟中配置试管的"配置序号"' : 'Please set "Config Order" in Experiment first'}</p>
               </div>
             ) : (
               <>
@@ -199,14 +202,14 @@ export default function NarratorPage() {
                       <div className={styles.tubeInfo}>
                         <div className={styles.tubeName}>{tube.name}</div>
                         <div className={styles.tubeVolume}>
-                          序号: {tube.configOrder || '未设置'}
+                          {language === 'zh' ? '序号:' : 'Order:'} {tube.configOrder || (language === 'zh' ? '未设置' : 'Not Set')}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
                 {!sortedTubes.every(t => t.configOrder) && (
-                  <p className={styles.warning}>⚠️ 部分试管未设置配置序号，请在实验模拟中补充</p>
+                  <p className={styles.warning}>⚠️ {language === 'zh' ? '部分试管未设置配置序号，请在实验模拟中补充' : 'Some tubes missing config order, please set in Experiment'}</p>
                 )}
               </>
             )}
@@ -216,7 +219,7 @@ export default function NarratorPage() {
         {/* 讲述结果 */}
         {narratedSteps && (
           <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>实验操作步骤</h2>
+            <h2 className={styles.sectionTitle}>{language === 'zh' ? '实验操作步骤' : 'Experiment Steps'}</h2>
             <div className={styles.stepsOutput}>
               <pre className={styles.stepsText}>{narratedSteps}</pre>
               <button
@@ -227,7 +230,7 @@ export default function NarratorPage() {
                   setTimeout(() => setCopied(false), 2000)
                 }}
               >
-                {copied ? '✅ 已复制' : '📋 复制'}
+                {copied ? `✅ ${language === 'zh' ? '已复制' : 'Copied'}` : `📋 ${language === 'zh' ? '复制' : 'Copy'}`}
               </button>
             </div>
           </div>

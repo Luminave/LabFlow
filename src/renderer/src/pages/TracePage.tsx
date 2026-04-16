@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { getAllTubeHistories } from '../stores/experimentStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
 import { useWarehouseStore } from '../stores/warehouseStore'
+import { useI18nStore } from '../stores/i18nStore'
+import { t } from '../i18n/translations'
 import styles from './TracePage.module.css'
 
 interface TubeHistory {
@@ -57,6 +59,7 @@ export default function TracePage() {
   const [filterType, setFilterType] = useState<string>('all')
   const { loadColors } = useSubstanceColorStore()
   const { tubes: warehouseTubes, fetchTubes } = useWarehouseStore()
+  const { language } = useI18nStore()
   
   useEffect(() => {
     fetchTubes()
@@ -102,9 +105,9 @@ export default function TracePage() {
   })
   
   const actionLabels: Record<string, string> = {
-    created: '创建试管',
-    transfer_in: '接收物质',
-    transfer_out: '移出物质'
+    created: language === 'zh' ? '创建试管' : 'Created',
+    transfer_in: language === 'zh' ? '接收物质' : 'Transfer In',
+    transfer_out: language === 'zh' ? '移出物质' : 'Transfer Out'
   }
   
   const actionColors: Record<string, string> = {
@@ -114,16 +117,16 @@ export default function TracePage() {
   }
   
   const typeLabels: Record<string, string> = {
-    source: '📦 原料',
-    intermediate: '🧪 中间产物',
-    buffer: '💧 缓冲液'
+    source: t('tube.source', language),
+    intermediate: t('tube.intermediate', language),
+    buffer: t('tube.buffer', language)
   }
   
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>试管溯源</h1>
-        <p className={styles.subtitle}>查看每个试管的完整操作档案</p>
+        <h1 className={styles.title}>{t('trace.title', language)}</h1>
+        <p className={styles.subtitle}>{language === 'zh' ? '查看每个试管的完整操作档案' : 'View complete operation history for each tube'}</p>
       </header>
       
       <div className={styles.content}>
@@ -132,7 +135,7 @@ export default function TracePage() {
           <div className={styles.filterBar}>
             <input
               type="text"
-              placeholder="搜索试管名称或成分..."
+              placeholder={t('warehouse.searchPlaceholder', language)}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className={styles.searchInput}
@@ -142,19 +145,19 @@ export default function TracePage() {
               onChange={(e) => setFilterType(e.target.value)}
               className={styles.filterSelect}
             >
-              <option value="all">全部类型</option>
-              <option value="source">📦 原料</option>
-              <option value="intermediate">🧪 中间产物</option>
-              <option value="buffer">💧 缓冲液</option>
+              <option value="all">{language === 'zh' ? '全部类型' : 'All Types'}</option>
+              <option value="source">{t('tube.source', language)}</option>
+              <option value="intermediate">{t('tube.intermediate', language)}</option>
+              <option value="buffer">{t('tube.buffer', language)}</option>
             </select>
           </div>
           
           {filteredTubes.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>🔍</div>
-              <p>{tubes.length === 0 ? '暂无试管记录' : '没有匹配的试管'}</p>
+              <p>{tubes.length === 0 ? (language === 'zh' ? '暂无试管记录' : 'No tube records') : (language === 'zh' ? '没有匹配的试管' : 'No matching tubes')}</p>
               <p style={{ fontSize: 12, marginTop: 8, color: '#64748b' }}>
-                {tubes.length === 0 ? '完成实验后，试管操作记录将显示在这里' : '请尝试其他搜索条件'}
+                {tubes.length === 0 ? (language === 'zh' ? '完成实验后，试管操作记录将显示在这里' : 'Tube records will appear after completing experiments') : (language === 'zh' ? '请尝试其他搜索条件' : 'Try other search criteria')}
               </p>
             </div>
           ) : (
@@ -169,7 +172,7 @@ export default function TracePage() {
                   <span className={styles.typeTag}>{typeLabels[tube.tubeType] || tube.tubeType}</span>
                 </div>
                 <div className={styles.itemMeta}>
-                  当前体积: {tube.currentVolume === Infinity ? '∞' : `${tube.currentVolume} ${tube.currentVolumeUnit}`}
+                  {language === 'zh' ? '当前体积:' : 'Current Volume:'} {tube.currentVolume === Infinity ? '∞' : `${tube.currentVolume} ${tube.currentVolumeUnit}`}
                 </div>
                 <div className={styles.itemSubstances}>
                   {tube.currentSubstances.slice(0, 3).map((s: any, i: number) => (
@@ -179,11 +182,11 @@ export default function TracePage() {
                     <span className={styles.substanceTag}>+{tube.currentSubstances.length - 3}</span>
                   )}
                   {tube.currentSubstances.length === 0 && (
-                    <span className={styles.substanceTag} style={{ color: '#94a3b8' }}>无物质</span>
+                    <span className={styles.substanceTag} style={{ color: '#94a3b8' }}>{language === 'zh' ? '无物质' : 'No Substances'}</span>
                   )}
                 </div>
                 <div className={styles.recordCount}>
-                  {tube.records.length} 条操作记录
+                  {tube.records.length} {language === 'zh' ? '条操作记录' : 'records'}
                 </div>
               </div>
             ))
@@ -196,17 +199,17 @@ export default function TracePage() {
             <p className={styles.tubeId}>ID: {selectedTube.tubeId}</p>
             
             <div className={styles.section}>
-              <h4>当前状态</h4>
+              <h4>{language === 'zh' ? '当前状态' : 'Current Status'}</h4>
               <div className={styles.infoGrid}>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>类型</span>
+                  <span className={styles.infoLabel}>{language === 'zh' ? '类型' : 'Type'}</span>
                   <span>{typeLabels[selectedTube.tubeType] || selectedTube.tubeType}</span>
                 </div>
                 <div className={styles.infoItem}>
-                  <span className={styles.infoLabel}>当前体积</span>
+                  <span className={styles.infoLabel}>{language === 'zh' ? '当前体积' : 'Current Volume'}</span>
                   <span>
                     {selectedTube.currentVolume === Infinity 
-                      ? '∞ 无限' 
+                      ? '∞' 
                       : `${selectedTube.currentVolume} ${selectedTube.currentVolumeUnit}`}
                   </span>
                 </div>
@@ -214,7 +217,7 @@ export default function TracePage() {
             </div>
             
             <div className={styles.section}>
-              <h4>当前物质组成</h4>
+              <h4>{language === 'zh' ? '当前物质组成' : 'Current Substances'}</h4>
               <div className={styles.substanceList}>
                 {selectedTube.currentSubstances.length > 0 ? (
                   selectedTube.currentSubstances.map((s: any, i: number) => (
@@ -226,13 +229,13 @@ export default function TracePage() {
                     />
                   ))
                 ) : (
-                  <p className={styles.emptyText}>无物质（缓冲液或空试管）</p>
+                  <p className={styles.emptyText}>{language === 'zh' ? '无物质（缓冲液或空试管）' : 'No substances (buffer or empty tube)'}</p>
                 )}
               </div>
             </div>
             
             <div className={styles.section}>
-              <h4>操作档案 ({selectedTube.records.length} 条记录)</h4>
+              <h4>{language === 'zh' ? '操作档案' : 'Operation History'} ({selectedTube.records.length} {language === 'zh' ? '条记录' : 'records'})</h4>
               {selectedTube.records.length > 0 ? (
                 <div className={styles.experimentsList}>
                   {/* 按实验分组 */}
@@ -249,7 +252,7 @@ export default function TracePage() {
                     
                     // 渲染每个实验组
                     return Array.from(experimentsMap.entries()).map(([expId, records]) => {
-                      const expName = records[0]?.experimentName || '试剂仓库'
+                      const expName = records[0]?.experimentName || (language === 'zh' ? '试剂仓库' : 'Warehouse')
                       const startTime = records[0]?.timestamp
                       const endTime = records[records.length - 1]?.timestamp
                       
@@ -286,7 +289,7 @@ export default function TracePage() {
                                   
                                   <div className={styles.recordDetails}>
                                     <div className={styles.volumeInfo}>
-                                      <span>体积: {record.volumeBefore} → {record.volumeAfter} {record.volumeUnit}</span>
+                                      <span>{language === 'zh' ? '体积' : 'Volume'}: {record.volumeBefore} → {record.volumeAfter} {record.volumeUnit}</span>
                                       {record.transferVolume !== undefined && (
                                         <span className={styles.volumeChange}>
                                           ({record.action === 'transfer_out' ? '-' : '+'}{record.transferVolume} {record.volumeUnit})
@@ -296,19 +299,19 @@ export default function TracePage() {
                                     
                                     {record.action === 'transfer_in' && record.transferFrom && (
                                       <p className={styles.transferInfo}>
-                                        ← 从试管 {record.transferFrom.slice(0, 8)}...
+                                        ← {language === 'zh' ? '从试管' : 'From tube'} {record.transferFrom.slice(0, 8)}...
                                       </p>
                                     )}
                                     
                                     {record.action === 'transfer_out' && record.transferTo && (
                                       <p className={styles.transferInfo}>
-                                        → 到试管 {record.transferTo.slice(0, 8)}...
+                                        → {language === 'zh' ? '到试管' : 'To tube'} {record.transferTo.slice(0, 8)}...
                                       </p>
                                     )}
                                     
                                     {record.substancesAfter.length > 0 && (
                                       <div className={styles.substancesChange}>
-                                        <span>物质: </span>
+                                        <span>{language === 'zh' ? '物质:' : 'Substances:'}</span>
                                         {record.substancesAfter.map((s: any, j: number) => (
                                           <SubstanceDisplay 
                                             key={j}
@@ -330,7 +333,7 @@ export default function TracePage() {
                   })()}
                 </div>
               ) : (
-                <p className={styles.emptyText}>暂无操作记录</p>
+                <p className={styles.emptyText}>{language === 'zh' ? '暂无操作记录' : 'No operation records'}</p>
               )}
             </div>
           </div>

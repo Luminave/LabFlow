@@ -2,18 +2,21 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useExperimentStore } from '../stores/experimentStore'
 import { useWarehouseStore } from '../stores/warehouseStore'
+import { useI18nStore } from '../stores/i18nStore'
+import { t } from '../i18n/translations'
 import styles from './HistoryPage.module.css'
 
 export default function HistoryPage() {
   const navigate = useNavigate()
   const { experiments, revertExperiment, deleteExperiment, loadExperiment } = useExperimentStore()
   const { fetchTubes } = useWarehouseStore()
+  const { language } = useI18nStore()
   const [selectedExperiment, setSelectedExperiment] = useState<string | null>(null)
   
   const statusLabels: Record<string, string> = {
-    draft: '草稿',
-    completed: '已完成',
-    reverted: '已回退'
+    draft: t('status.draft', language),
+    completed: t('status.completed', language),
+    reverted: t('status.reverted', language)
   }
   
   const statusColors: Record<string, string> = {
@@ -30,11 +33,11 @@ export default function HistoryPage() {
   const handleRevert = async (id: string) => {
     // 检查是否是最新的已完成实验
     if (latestCompletedExperiment && latestCompletedExperiment.id !== id) {
-      alert('只能回退最新的已完成实验！\n\n请先回退或删除更晚的实验。')
+      alert(language === 'zh' ? '只能回退最新的已完成实验！\n\n请先回退或删除更晚的实验。' : 'Can only revert the latest completed experiment!\n\nPlease revert or delete later experiments first.')
       return
     }
     
-    if (confirm('确定要回退这个实验吗？\n\n试剂仓库将恢复到实验前的状态，并跳转到实验模拟页面。')) {
+    if (confirm(language === 'zh' ? '确定要回退这个实验吗？\n\n试剂仓库将恢复到实验前的状态，并跳转到实验模拟页面。' : 'Revert this experiment?\n\nWarehouse will be restored and you will be redirected to Experiment page.')) {
       const success = await revertExperiment(id)
       if (success) {
         await fetchTubes() // 刷新仓库显示
@@ -42,13 +45,13 @@ export default function HistoryPage() {
         loadExperiment(id)
         // 跳转到实验模拟页面
         navigate('/experiment')
-        alert('实验已回退，试剂仓库已恢复')
+        alert(language === 'zh' ? '实验已回退，试剂仓库已恢复' : 'Experiment reverted, warehouse restored')
       }
     }
   }
   
   const handleDelete = (id: string) => {
-    if (confirm('确定删除这条实验记录？此操作不可恢复。')) {
+    if (confirm(language === 'zh' ? '确定删除这条实验记录？此操作不可恢复。' : 'Delete this experiment record? This cannot be undone.')) {
       deleteExperiment(id)
       if (selectedExperiment === id) {
         setSelectedExperiment(null)
@@ -66,7 +69,7 @@ export default function HistoryPage() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>实验记录</h1>
+        <h1 className={styles.title}>{t('history.title', language)}</h1>
       </header>
       
       <div className={styles.content}>
@@ -75,8 +78,8 @@ export default function HistoryPage() {
           {experiments.length === 0 ? (
             <div className={styles.empty}>
               <div className={styles.emptyIcon}>📋</div>
-              <p>暂无实验记录</p>
-              <p className={styles.emptyHint}>完成实验后将自动保存到这里</p>
+              <p>{t('history.emptyHint', language)}</p>
+              <p className={styles.emptyHint}>{language === 'zh' ? '完成实验后将自动保存到这里' : 'Completed experiments will be saved here'}</p>
             </div>
           ) : (
             experiments.map(exp => (
@@ -96,15 +99,15 @@ export default function HistoryPage() {
                 </div>
                 
                 <div className={styles.itemMeta}>
-                  <span>创建于 {new Date(exp.createdAt).toLocaleString('zh-CN')}</span>
+                  <span>{language === 'zh' ? '创建于' : 'Created'} {new Date(exp.createdAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
                   {exp.completedAt && (
-                    <span> · 完成于 {new Date(exp.completedAt).toLocaleString('zh-CN')}</span>
+                    <span> · {language === 'zh' ? '完成于' : 'Completed'} {new Date(exp.completedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
                   )}
                 </div>
                 
                 <div className={styles.itemStats}>
-                  <span>{exp.tubes?.length || 0} 个试管</span>
-                  <span>{exp.connections?.length || 0} 次移液</span>
+                  <span>{exp.tubes?.length || 0} {t('history.tubes', language)}</span>
+                  <span>{exp.connections?.length || 0} {language === 'zh' ? '次移液' : 'transfers'}</span>
                 </div>
               </div>
             ))
@@ -121,7 +124,7 @@ export default function HistoryPage() {
                   className={styles.openBtn}
                   onClick={() => handleOpen(selected.id)}
                 >
-                  打开工程
+                  {language === 'zh' ? '打开工程' : 'Open Project'}
                 </button>
                 {selected.status === 'completed' && (
                   <button 
@@ -130,48 +133,48 @@ export default function HistoryPage() {
                     disabled={latestCompletedExperiment && latestCompletedExperiment.id !== selected.id}
                     title={
                       latestCompletedExperiment && latestCompletedExperiment.id !== selected.id
-                        ? '只能回退最新的已完成实验'
-                        : '回退实验，恢复试剂仓库'
+                        ? (language === 'zh' ? '只能回退最新的已完成实验' : 'Can only revert latest completed experiment')
+                        : (language === 'zh' ? '回退实验，恢复试剂仓库' : 'Revert experiment, restore warehouse')
                     }
                     style={{
                       opacity: latestCompletedExperiment && latestCompletedExperiment.id !== selected.id ? 0.5 : 1,
                       cursor: latestCompletedExperiment && latestCompletedExperiment.id !== selected.id ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    回退实验
+                    {language === 'zh' ? '回退实验' : 'Revert'}
                   </button>
                 )}
                 <button 
                   className={styles.deleteBtn}
                   onClick={() => handleDelete(selected.id)}
                 >
-                  删除记录
+                  {language === 'zh' ? '删除记录' : 'Delete'}
                 </button>
               </div>
               
               {selected.status === 'completed' && latestCompletedExperiment && latestCompletedExperiment.id !== selected.id && (
                 <div className={styles.warning}>
-                  ⚠️ 只能回退最新的已完成实验（{latestCompletedExperiment.name}）
+                  ⚠️ {language === 'zh' ? '只能回退最新的已完成实验' : 'Can only revert latest completed experiment'}（{latestCompletedExperiment.name}）
                 </div>
               )}
             </div>
             
             <div className={styles.detailBody}>
               <div className={styles.section}>
-                <h4>实验信息</h4>
+                <h4>{language === 'zh' ? '实验信息' : 'Experiment Info'}</h4>
                 <div className={styles.infoGrid}>
                   <div className={styles.infoItem}>
-                    <span className={styles.infoLabel}>创建时间</span>
-                    <span>{new Date(selected.createdAt).toLocaleString('zh-CN')}</span>
+                    <span className={styles.infoLabel}>{language === 'zh' ? '创建时间' : 'Created'}</span>
+                    <span>{new Date(selected.createdAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
                   </div>
                   {selected.completedAt && (
                     <div className={styles.infoItem}>
-                      <span className={styles.infoLabel}>完成时间</span>
-                      <span>{new Date(selected.completedAt).toLocaleString('zh-CN')}</span>
+                      <span className={styles.infoLabel}>{language === 'zh' ? '完成时间' : 'Completed'}</span>
+                      <span>{new Date(selected.completedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
                     </div>
                   )}
                   <div className={styles.infoItem}>
-                    <span className={styles.infoLabel}>状态</span>
+                    <span className={styles.infoLabel}>{language === 'zh' ? '状态' : 'Status'}</span>
                     <span style={{ color: statusColors[selected.status] }}>
                       {statusLabels[selected.status]}
                     </span>
@@ -180,7 +183,7 @@ export default function HistoryPage() {
               </div>
               
               <div className={styles.section}>
-                <h4>涉及的试管</h4>
+                <h4>{language === 'zh' ? '涉及的试管' : 'Tubes Involved'}</h4>
                 <div className={styles.tubeList}>
                   {(() => {
                     // 过滤掉缓冲液实例，合并显示仓库缓冲液
@@ -228,13 +231,13 @@ export default function HistoryPage() {
                         <div className={styles.tubeInfo}>
                           <strong>{tube.name}</strong>
                           <span className={styles.tubeType}>
-                            {tube.type === 'source' ? '📦 原料' : 
-                             tube.type === 'buffer' ? '💧 缓冲液' : '🧪 中间产物'}
+                            {tube.type === 'source' ? t('tube.source', language) : 
+                             tube.type === 'buffer' ? t('tube.buffer', language) : t('tube.intermediate', language)}
                           </span>
                         </div>
                         <div className={styles.tubeVolume}>
                           {tube.isBufferUsage ? (
-                            <span>消耗 {tube.remainingVolume} {tube.remainingVolumeUnit}</span>
+                            <span>{language === 'zh' ? '消耗' : 'Used'} {tube.remainingVolume} {tube.remainingVolumeUnit}</span>
                           ) : (
                             tube.remainingVolume === Infinity ? '∞' : `${tube.remainingVolume} ${tube.remainingVolumeUnit}`
                           )}
@@ -246,7 +249,7 @@ export default function HistoryPage() {
               </div>
               
               <div className={styles.section}>
-                <h4>移液操作</h4>
+                <h4>{language === 'zh' ? '移液操作' : 'Transfer Operations'}</h4>
                 <div className={styles.connectionList}>
                   {(selected.connections || []).map((conn: any) => {
                     const fromTube = selected.tubes?.find((t: any) => t.id === conn.fromTubeId)
