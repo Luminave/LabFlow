@@ -117,6 +117,9 @@ function TubeNode({ data, selected }: NodeProps) {
         <div className={styles.volume}>
           {displayVolume()} {tube.remainingVolumeUnit}
           {tube.asSource && <span className={styles.asSourceTag}>原料</span>}
+          {tube.configOrder && tube.type === 'intermediate' && !tube.asSource && (
+            <span className={styles.configOrderTag}>#{tube.configOrder}</span>
+          )}
         </div>
         
         {tube.type !== 'sample' && tube.type !== 'waste' && (
@@ -131,6 +134,9 @@ function TubeNode({ data, selected }: NodeProps) {
           </div>
         )}
         
+        {tube.tubeNumber && tube.type === 'intermediate' && !tube.asSource && (
+          <div className={styles.tubeNumber}>{tube.tubeNumber}</div>
+        )}
         <div className={styles.name}>{tube.name}</div>
       </div>
       

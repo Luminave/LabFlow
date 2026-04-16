@@ -87,6 +87,13 @@
   color: #94a3b8;
 }
 
+.tubeNumber {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c3aed;
+  margin-bottom: 4px;
+}
+
 .name {
   font-size: 13px;
   font-weight: 500;
@@ -196,6 +203,20 @@
   color: #92400e;
   background: #fef3c7;
   border: 1px solid #fbbf24;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+/* 讲述者序号标签 */
+.configOrderTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #34d399;
   border-radius: 3px;
   vertical-align: middle;
 }

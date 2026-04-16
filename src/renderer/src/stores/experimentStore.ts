@@ -5,6 +5,7 @@
 
 import { create } from 'zustand'
 import { Experiment, Tube, TransferConnection, TubePosition, Substance, VolumeUnit } from '@shared/types'
+import { roundVolume } from '@shared/utils/calculations'
 
 const CURRENT_EXPERIMENT_KEY = 'labflow_current_experiment'
 const TUBE_HISTORIES_KEY = 'labflow_tube_histories'
@@ -57,23 +58,26 @@ function calculateEndState(tubes: Tube[], connections: TransferConnection[]): Tu
     let endVolume: number
     if (tube.type === 'source') {
       // 原料试管：初始体积 - 移出体积
-      endVolume = Math.max(0, tube.remainingVolume - outVolume)
+      endVolume = roundVolume(Math.max(0, tube.remainingVolume - outVolume))
     } else if (tube.type === 'buffer') {
       // 缓冲液：保持无限或不变
       endVolume = tube.remainingVolume
     } else {
       // 中间产物：移入体积 - 移出体积
-      endVolume = Math.max(0, inVolume - outVolume)
+      endVolume = roundVolume(Math.max(0, inVolume - outVolume))
     }
     
     // 浓度保持不变（用户设定的值）
     // 中间试管不重新计算浓度，只更新体积
     const endSubstances = tube.substances
     
+    // totalVolume：保留首次创建体积（不随移液变化）
+    const preservedTotalVolume = tube.totalVolume
+    
     return {
       ...tube,
       remainingVolume: endVolume,
-      totalVolume: endVolume,
+      totalVolume: preservedTotalVolume,
       substances: endSubstances
     }
   })
@@ -805,7 +809,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       const sourceHistory = histories.get(conn.fromTubeId)
       if (sourceHistory) {
         addRecordToHistory(sourceHistory, currentExperiment.id, currentExperiment.name, 'transfer_out',
-          sourceHistory.currentVolume, Math.max(0, sourceHistory.currentVolume - conn.volume),
+          roundVolume(sourceHistory.currentVolume), roundVolume(Math.max(0, sourceHistory.currentVolume - conn.volume)),
           conn.volumeUnit, sourceHistory.currentSubstances, sourceHistory.currentSubstances,
           undefined, conn.toTubeId, conn.volume)
       }
@@ -843,7 +847,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           : conn.fromTubeId
         
         addRecordToHistory(targetHistory, currentExperiment.id, currentExperiment.name, 'transfer_in',
-          targetHistory.currentVolume, targetHistory.currentVolume + conn.volume,
+          roundVolume(targetHistory.currentVolume), roundVolume(targetHistory.currentVolume + conn.volume),
           conn.volumeUnit, targetHistory.currentSubstances, newSubstances,
           fromId, undefined, conn.volume)
       }
@@ -898,7 +902,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         // 原料试管：使用仓库中的初始体积 - 移出体积
         const whTube = warehouseTubesForInit.find(t => t.id === tube.id)
         const initialVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-        endVolume = Math.max(0, initialVolume - outVolume)
+        endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
       } else if (tube.type === 'buffer') {
         // 缓冲液：保持不变
         endVolume = tube.remainingVolume
@@ -910,10 +914,10 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         if (isInWarehouse) {
           // 从仓库添加的中间产物：当作原料处理
           const initialVolume = whTube.remainingVolume
-          endVolume = Math.max(0, initialVolume - outVolume)
+          endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
         } else {
           // 新创建的中间产物：移入体积 - 移出体积
-          endVolume = Math.max(0, inVolume - outVolume)
+          endVolume = roundVolume(Math.max(0, inVolume - outVolume))
         }
       } else {
         endVolume = tube.remainingVolume
@@ -922,10 +926,23 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       // 浓度保持不变（用户设定的值）
       const endSubstances = tube.substances
       
+      // totalVolume：保留首次创建体积
+      // - 原料/缓冲液：保留原 totalVolume
+      // - 新创建的中间产物：totalVolume = 移入体积（首次创建体积）
+      // - 已在仓库的中间产物：保留原 totalVolume
+      let preservedTotalVolume = tube.totalVolume
+      if (tube.type === 'intermediate') {
+        const whTube = warehouseTubesForInit.find(t => t.id === tube.id)
+        if (!whTube) {
+          // 新创建的中间产物：totalVolume = 移入体积
+          preservedTotalVolume = inVolume > 0 ? inVolume : tube.totalVolume
+        }
+      }
+      
       return {
         ...tube,
         remainingVolume: endVolume,
-        totalVolume: endVolume,
+        totalVolume: preservedTotalVolume,
         substances: endSubstances,
         updatedAt: new Date().toISOString()
       }
@@ -1033,14 +1050,18 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         console.log('[completeExperiment] Updating tube in localStorage:', tube.id, tube.remainingVolume)
         const index = existingTubes.findIndex(t => t.id === tube.id)
         if (index >= 0) {
-          existingTubes[index] = tube
+          // 排除管号等实验专用字段
+          const { tubeNumber: _, ...tubeData } = tube as any
+          existingTubes[index] = tubeData
         }
       }
       
       // 添加新试管
       for (const tube of tubesToAdd) {
         console.log('[completeExperiment] Adding tube to localStorage:', tube.id, tube.name, tube.remainingVolume)
-        existingTubes.push(tube)
+        // 排除管号等实验专用字段
+        const { tubeNumber: _, ...tubeData } = tube as any
+        existingTubes.push(tubeData)
       }
       
       localStorage.setItem('labflow_tubes', JSON.stringify(existingTubes))
@@ -1138,7 +1159,15 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     
     const newExperiments = get().experiments.map(e => e.id === experimentId ? revertedExperiment : e)
     saveExperimentsToStorage(newExperiments)
-    set({ experiments: newExperiments })
+    
+    // 同步更新 currentExperiment（如果当前正在查看这个实验）
+    const currentExp = get().currentExperiment
+    const updates: any = { experiments: newExperiments }
+    if (currentExp && currentExp.id === experimentId) {
+      updates.currentExperiment = revertedExperiment
+    }
+    set(updates)
+    
     console.log('[revertExperiment] Experiment reverted successfully')
     return true
   },

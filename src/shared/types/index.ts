@@ -34,6 +34,7 @@ export interface TubeGroup {
   name: string // 分组名称
   color: string // 分组方框颜色
   notes: string // 备注
+  hidden?: boolean // 是否隐藏
   createdAt: string // ISO 8601
 }
 
@@ -60,6 +61,9 @@ export interface Tube {
   
   // 配置序号（用于讲述者排序）
   configOrder?: number // 正整数，按序号排序生成实验步骤
+  
+  // 管号（仅存储在实验工程中，不计入试管档案）
+  tubeNumber?: string // 最多5个字符，默认以#开头
   
   // 分组
   groupId?: string // 分组 ID

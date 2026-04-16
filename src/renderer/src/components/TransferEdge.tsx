@@ -6,6 +6,7 @@ interface TransferEdgeData {
   volumeUnit: string
   labelPosition?: number
   onUpdateLabelPosition?: (edgeId: string, position: number) => void
+  onEdgeClick?: (edgeId: string, volume: number, volumeUnit: string) => void
 }
 
 /**
@@ -71,6 +72,7 @@ const TransferEdge: FC<EdgeProps> = ({
   const reactFlowInstance = useReactFlow()
   const edgeData = data as unknown as TransferEdgeData
   const [isDragging, setIsDragging] = useState(false)
+  const mouseStartRef = useRef<{x: number, y: number} | null>(null)
 
   // 用 getBezierPath 获取与渲染完全一致的曲线路径
   const [edgePath] = getBezierPath({
@@ -94,11 +96,12 @@ const TransferEdge: FC<EdgeProps> = ({
   const currentPos = edgeData?.labelPosition ?? 0.5
   const pt = bezierPoint(currentPos, sourceX, sourceY, c1x, c1y, c2x, c2y, targetX, targetY)
 
-  // --- 拖动 ---
+  // --- 拖动/点击 ---
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
       e.preventDefault()
+      mouseStartRef.current = { x: e.clientX, y: e.clientY }
       setIsDragging(true)
 
       const flowContainer = document.querySelector('.react-flow') as HTMLElement
@@ -111,7 +114,17 @@ const TransferEdge: FC<EdgeProps> = ({
       const dc2x = curParsed?.c2x ?? targetX
       const dc2y = curParsed?.c2y ?? targetY
 
+      let hasMoved = false
+
       const handleMouseMove = (ev: MouseEvent) => {
+        // 检测是否实际移动了
+        if (mouseStartRef.current) {
+          const dx = ev.clientX - mouseStartRef.current.x
+          const dy = ev.clientY - mouseStartRef.current.y
+          if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+            hasMoved = true
+          }
+        }
         ev.preventDefault()
         const rect = flowContainer.getBoundingClientRect()
         const zoom = reactFlowInstance.getZoom()
@@ -155,6 +168,11 @@ const TransferEdge: FC<EdgeProps> = ({
 
       const handleMouseUp = () => {
         setIsDragging(false)
+        // 如果没有移动，视为点击
+        if (!hasMoved && edgeData?.onEdgeClick) {
+          edgeData.onEdgeClick(id, edgeData.volume, edgeData.volumeUnit)
+        }
+        mouseStartRef.current = null
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
       }
@@ -180,7 +198,7 @@ const TransferEdge: FC<EdgeProps> = ({
     }
   }, [isDragging])
 
-  const labelText = `${edgeData?.volume ?? 0} ${edgeData?.volumeUnit ?? 'μL'}`
+  const labelText = `${Number((edgeData?.volume ?? 0).toFixed(3))} ${edgeData?.volumeUnit ?? 'μL'}`
 
   return (
     <>

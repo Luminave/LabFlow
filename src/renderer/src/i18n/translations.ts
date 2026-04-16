@@ -17,7 +17,7 @@ export const translations: Record<string, Record<Language, string>> = {
   
   // 工具栏
   'toolbar.newExperiment': { zh: '新建工程', en: 'New Project' },
-  'toolbar.newWaste': { zh: '新建耗损', en: 'New Waste' },
+  'toolbar.newWaste': { zh: '新建耗损实验', en: 'New Waste Exp.' },
   'toolbar.open': { zh: '打开工程', en: 'Open' },
   'toolbar.experimentName': { zh: '实验名称...', en: 'Experiment name...' },
   'toolbar.startExperiment': { zh: '开始新实验', en: 'Start New' },
@@ -29,7 +29,7 @@ export const translations: Record<string, Record<Language, string>> = {
   'toolbar.newSample': { zh: '+ 新建上样', en: '+ New Sample' },
   'toolbar.newWasteTube': { zh: '+ 新建耗损', en: '+ New Waste' },
   'toolbar.save': { zh: '保存', en: 'Save' },
-  'toolbar.saveAs': { zh: '另存为', en: 'Save As' },
+  'toolbar.saveAs': { zh: '另存工程', en: 'Save As' },
   'toolbar.quickNaming': { zh: '快捷命名', en: 'Quick Naming' },
   'toolbar.endExperiment': { zh: '结束实验', en: 'End Experiment' },
   'toolbar.check': { zh: '检查', en: 'Check' },

@@ -41,6 +41,7 @@ export default function WarehousePage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [flashTarget, setFlashTarget] = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false) // 是否显示隐藏的分组
   const tubeListRef = useRef<HTMLDivElement>(null)
   
   // 加载已保存的试管和颜色配置
@@ -73,9 +74,15 @@ export default function WarehousePage() {
       }
     }
     
-    // 添加所有已创建的分组（包括空的）
+    // 添加所有已创建的分组（包括空的），隐藏的分组不显示（除非开启显示隐藏）
     for (const group of groups) {
-      grouped.push({ group, tubes: groupMap.get(group.id) || [] })
+      if (group.hidden && !showHidden) {
+        // 隐藏分组中的试管移到未分组
+        const hiddenTubes = groupMap.get(group.id) || []
+        ungrouped.push(...hiddenTubes)
+      } else {
+        grouped.push({ group, tubes: groupMap.get(group.id) || [] })
+      }
       groupMap.delete(group.id)
     }
     
@@ -90,7 +97,7 @@ export default function WarehousePage() {
     }
     
     return grouped
-  }, [tubes, groups])
+  }, [tubes, groups, showHidden])
   
   // 搜索结果
   const searchResults = useMemo(() => {
@@ -98,15 +105,18 @@ export default function WarehousePage() {
     const q = searchQuery.toLowerCase()
     const results: { type: 'group' | 'tube'; id: string; name: string; subtitle?: string; groupId?: string }[] = []
     
-    // 搜索分组
+    // 搜索分组（隐藏的分组不搜索）
     for (const group of groups) {
+      if (group.hidden) continue
       if (group.name.toLowerCase().includes(q) || group.notes?.toLowerCase().includes(q)) {
         results.push({ type: 'group', id: group.id, name: group.name, subtitle: group.notes || undefined })
       }
     }
     
-    // 搜索试管
+    // 搜索试管（隐藏分组中的试管不搜索）
+    const hiddenGroupIds = new Set(groups.filter(g => g.hidden).map(g => g.id))
     for (const tube of tubes) {
+      if (tube.groupId && hiddenGroupIds.has(tube.groupId)) continue
       if (tube.name.toLowerCase().includes(q)) {
         results.push({ type: 'tube', id: tube.id, name: tube.name, subtitle: tube.type === 'buffer' ? '缓冲液' : tube.type === 'source' ? '原料' : '中间产物', groupId: tube.groupId })
       }
@@ -203,8 +213,9 @@ export default function WarehousePage() {
       return
     }
     
-    // 添加到实验
-    addSourceTube(tube)
+    // 添加到实验（中间产物自动勾选"作为原料"）
+    const tubeToAdd = tube.type === 'intermediate' ? { ...tube, asSource: true } : tube
+    addSourceTube(tubeToAdd)
     alert(`已将 ${tube.name} 添加到当前实验`)
   }
   
@@ -242,6 +253,9 @@ export default function WarehousePage() {
               </div>
             )}
           </div>
+          <button className={styles.toggleHiddenBtn} onClick={() => setShowHidden(!showHidden)}>
+            {showHidden ? '🙈 不显示隐藏的分组' : '👁️ 显示隐藏的分组'}
+          </button>
           <button className={styles.addGroupButton} onClick={handleAddGroup}>
             📁 新增分组
           </button>
@@ -350,6 +364,7 @@ export default function WarehousePage() {
 }
 
 function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, hasExperiment, groups, onUpdateTube, flashTarget, onFlashDone }: any) {
+  const navigate = useNavigate()
   const statusColors: Record<string, string> = {
     active: '#10b981',
     depleted: '#f59e0b',
@@ -374,9 +389,16 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
     <div id={`target-${tube.id}`} className={`${styles.tubeCard} ${isFlashing ? styles.flashAnimation : ''}`} onAnimationEnd={isFlashing ? onFlashDone : undefined}>
       <div className={styles.tubeHeader}>
         <h3 className={styles.tubeName}>{tube.name}</h3>
-        <span className={styles.tubeStatus} style={{ backgroundColor: statusColors[tube.status] }}>
-          {statusLabels[tube.status]}
-        </span>
+        <select
+          className={styles.tubeStatusSelect}
+          value={tube.status}
+          onChange={(e) => onStatusChange(e.target.value)}
+          style={{ backgroundColor: statusColors[tube.status] }}
+        >
+          <option value="active">可用</option>
+          <option value="depleted">不足</option>
+          <option value="discarded">已弃</option>
+        </select>
       </div>
       
       <div className={styles.tubeBody}>
@@ -449,18 +471,14 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
         <button className={styles.actionBtn} onClick={onEdit}>
           ✏️ 编辑
         </button>
+        {tube.type !== 'buffer' && (
+          <button className={styles.actionBtn} onClick={() => navigate(`/trace?tubeId=${tube.id}`)}>
+            🔍 溯源
+          </button>
+        )}
         <button className={styles.actionBtn} onClick={onDelete}>
           🗑️ 删除
         </button>
-        <select 
-          className={styles.statusSelect}
-          value={tube.status}
-          onChange={(e) => onStatusChange(e.target.value)}
-        >
-          <option value="active">可用</option>
-          <option value="depleted">不足</option>
-          <option value="discarded">已弃</option>
-        </select>
       </div>
     </div>
   )
@@ -513,6 +531,7 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
   const [name, setName] = useState(group.name)
   const [color, setColor] = useState(group.color)
   const [notes, setNotes] = useState(group.notes || '')
+  const [hidden, setHidden] = useState(group.hidden || false)
   
   const presetColors = GROUP_PRESET_COLORS
   
@@ -522,7 +541,7 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
       alert('请输入分组名称')
       return
     }
-    onSave({ name: name.trim(), color, notes: notes.trim() })
+    onSave({ name: name.trim(), color, notes: notes.trim(), hidden })
   }
   
   return (
@@ -573,6 +592,9 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
           </div>
           
           <div className={styles.formActions}>
+            <button type="button" className={styles.hideGroupBtn} onClick={() => setHidden(!hidden)}>
+              {hidden ? '👁️ 显示分组' : '🙈 隐藏分组'}
+            </button>
             <button type="button" className={styles.deleteGroupBtn} onClick={onDelete}>
               删除分组
             </button>

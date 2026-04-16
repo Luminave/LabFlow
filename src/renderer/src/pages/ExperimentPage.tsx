@@ -22,6 +22,7 @@ import { useExperimentStore } from '../stores/experimentStore'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
 import { Tube, Substance, ConcentrationUnit, VolumeUnit, TransferConnection } from '@shared/types'
+import { roundVolume } from '@shared/utils/calculations'
 import TubeNode from '../components/TubeNode'
 import TransferEdge from '../components/TransferEdge'
 import styles from './ExperimentPage.module.css'
@@ -66,6 +67,7 @@ export default function ExperimentPage() {
   const [experimentName, setExperimentName] = useState('')
   const [showTubeSelector, setShowTubeSelector] = useState(false)
   const [showExperimentManager, setShowExperimentManager] = useState(false)
+  const [experimentSearch, setExperimentSearch] = useState('')
   const [showSaveAs, setShowSaveAs] = useState(false)
   const [saveAsName, setSaveAsName] = useState('')
   const [showBuffers, setShowBuffers] = useState(true) // 显示缓冲液
@@ -105,7 +107,7 @@ export default function ExperimentPage() {
         // 原料试管:使用仓库中的初始体积 - 移出体积
         const whTube = warehouseTubes.find(t => t.id === tube.id)
         const initialVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-        endVolume = Math.max(0, initialVolume - outVolume)
+        endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
       } else if (tube.type === 'buffer') {
         // 缓冲液:保持不变
         endVolume = tube.remainingVolume
@@ -117,10 +119,10 @@ export default function ExperimentPage() {
         if (isInWarehouse) {
           // 从仓库添加的中间产物:当作原料处理
           const initialVolume = whTube.remainingVolume
-          endVolume = Math.max(0, initialVolume - outVolume)
+          endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
         } else {
           // 新创建的中间产物:移入体积 - 移出体积
-          endVolume = Math.max(0, inVolume - outVolume)
+          endVolume = roundVolume(Math.max(0, inVolume - outVolume))
         }
       } else {
         endVolume = tube.remainingVolume
@@ -136,7 +138,7 @@ export default function ExperimentPage() {
   }
 
   // 是否为只读模式(已完成的实验)
-  const isReadOnly = currentExperiment?.status === 'completed'
+  const isReadOnly = currentExperiment?.status === 'completed' || currentExperiment?.status === 'reverted'
 
   // 检查实验问题
   const handleCheckExperiment = () => {
@@ -372,6 +374,23 @@ export default function ExperimentPage() {
     setShowCheckResult(true)
   }
 
+  // 清空所有讲述者序号
+  const handleClearConfigOrders = () => {
+    if (!currentExperiment || isReadOnly) return
+    if (!confirm('确定清空当前工程中所有试管的讲述者序号？')) return
+
+    const newTubes = currentTubes.map(tube => {
+      if (tube.configOrder) {
+        return { ...tube, configOrder: undefined, updatedAt: new Date().toISOString() }
+      }
+      return tube
+    })
+
+    for (const tube of newTubes) {
+      updateTubeInExperiment(tube.id, { configOrder: tube.configOrder })
+    }
+  }
+
   // 刷新工程 - 重新计算中间产物，从仓库更新原料试管
   const handleRefreshExperiment = () => {
     if (!currentExperiment || isReadOnly) return
@@ -499,6 +518,7 @@ export default function ExperimentPage() {
 
   // 编辑试管
   const [editingTube, setEditingTube] = useState<Tube | null>(null)
+  const [editingEdge, setEditingEdge] = useState<{id: string, volume: number, volumeUnit: string} | null>(null)
   const [editFormData, setEditFormData] = useState<{
     name: string
     targetVolume: number
@@ -507,14 +527,16 @@ export default function ExperimentPage() {
     selectedBuffer: string
     asSource: boolean
     configOrder: string // 用字符串存储,方便输入
-  }>({
+    tubeNumber: string // 管号,最多5个字符
+  }>({  
     name: '',
     targetVolume: 0,
     targetVolumeUnit: 'μL',
     substances: [],
     selectedBuffer: '',
     asSource: false,
-    configOrder: ''
+    configOrder: '',
+    tubeNumber: ''
   })
 
   // 同步 currentTubes 到 nodes
@@ -537,7 +559,8 @@ export default function ExperimentPage() {
         if (tube.type === 'source' || tube.type === 'intermediate') {
           const whTube = warehouseTubes.find(t => t.id === tube.id)
           if (whTube) {
-            initialVolumeMap.set(tube.id, whTube.remainingVolume)
+            // 使用 totalVolume（首次创建体积）作为初始体积，而非 remainingVolume（当前剩余体积）
+            initialVolumeMap.set(tube.id, whTube.totalVolume)
             isInWarehouseMap.set(tube.id, true)
           }
         }
@@ -575,6 +598,20 @@ export default function ExperimentPage() {
     }
   }, [currentTubes, tubePositions, connections, showBuffers, warehouseTubes])
 
+  // 点击连接线标签
+  const handleEdgeClick = useCallback((edgeId: string, volume: number, volumeUnit: string) => {
+    setEditingEdge({ id: edgeId, volume, volumeUnit })
+  }, [])
+
+  // 删除连接线
+  const handleDeleteEdge = useCallback(() => {
+    if (!editingEdge) return
+    if (!confirm('确定删除这条连接线?')) return
+    removeConnection(editingEdge.id)
+    setEdges(eds => eds.filter(e => e.id !== editingEdge.id))
+    setEditingEdge(null)
+  }, [editingEdge, removeConnection, setEdges])
+
   // 同步 connections 到 edges
   useEffect(() => {
     if (connections.length > 0) {
@@ -596,14 +633,15 @@ export default function ExperimentPage() {
             volume: conn.volume,
             volumeUnit: conn.volumeUnit,
             labelPosition: conn.labelPosition ?? 0.5,
-            onUpdateLabelPosition: handleUpdateLabelPosition
+            onUpdateLabelPosition: handleUpdateLabelPosition,
+            onEdgeClick: handleEdgeClick
           }
         }
       }).filter(Boolean) as Edge[]
 
       setEdges(newEdges)
     }
-  }, [connections, showBuffers, currentTubes, handleUpdateLabelPosition])
+  }, [connections, showBuffers, currentTubes, handleUpdateLabelPosition, handleEdgeClick])
 
   // 连接
   const onConnect = useCallback((connection: Connection) => {
@@ -615,7 +653,7 @@ export default function ExperimentPage() {
       type: 'transfer',
       animated: true,
       style: { stroke: '#4f46e5', strokeWidth: 3 },
-      data: { volume: 0, volumeUnit: 'μL', labelPosition: 0.5, onUpdateLabelPosition: handleUpdateLabelPosition }
+      data: { volume: 0, volumeUnit: 'μL', labelPosition: 0.5, onUpdateLabelPosition: handleUpdateLabelPosition, onEdgeClick: handleEdgeClick }
     }
 
     setEdges(eds => addEdge(newEdge, eds) as Edge[])
@@ -723,7 +761,8 @@ export default function ExperimentPage() {
       substances: [...tube.substances],
       selectedBuffer,
       asSource: tube.asSource || false,
-      configOrder: tube.configOrder ? String(tube.configOrder) : ''
+      configOrder: tube.configOrder ? String(tube.configOrder) : '',
+      tubeNumber: tube.tubeNumber || ''
     })
   }, [connections, currentTubes])
 
@@ -779,6 +818,20 @@ export default function ExperimentPage() {
       return
     }
 
+    // 处理管号:去掉首尾空格,如果非空且不以#开头则自动加#
+    let tubeNumber = editFormData.tubeNumber.trim()
+    if (tubeNumber.length > 5) {
+      alert('管号最多5个字符')
+      return
+    }
+    if (tubeNumber && !tubeNumber.startsWith('#')) {
+      tubeNumber = '#' + tubeNumber
+    }
+    if (tubeNumber && tubeNumber.length > 5) {
+      alert('管号最多5个字符(含#)')
+      return
+    }
+
     const updates: Partial<Tube> = {
       name: trimmedName,
       totalVolume: editFormData.targetVolume,
@@ -786,7 +839,8 @@ export default function ExperimentPage() {
       substances: editFormData.substances,
       selectedBuffer: editFormData.selectedBuffer,
       asSource: editFormData.asSource,
-      configOrder: configOrderNum
+      configOrder: configOrderNum,
+      tubeNumber: tubeNumber || undefined
     }
 
     updateTubeInExperiment(editingTube.id, updates)
@@ -1168,7 +1222,12 @@ export default function ExperimentPage() {
   // 删除试管
   const handleDeleteTube = (tubeId: string) => {
     if (isReadOnly) return
-    if (!confirm('确定删除这个试管?相关的移液连接也会被删除。')) return
+    const tube = currentTubes.find(t => t.id === tubeId)
+    const isSource = tube?.type === 'source'
+    const msg = isSource
+      ? '确定从当前工程中移除这个原料试管?\n\n注意:仅从当前工程移除,不会删除仓库中的试剂。'
+      : '确定删除这个试管?相关的移液连接也会被删除。'
+    if (!confirm(msg)) return
 
     // 删除相关连接
     const relatedConns = connections.filter(c => c.fromTubeId === tubeId || c.toTubeId === tubeId)
@@ -1277,92 +1336,113 @@ export default function ExperimentPage() {
 
             {!isReadOnly && (
               <>
-                <label className={styles.bufferLabel}>
-                  {t('toolbar.defaultBuffer', language)}
-                  <select
-                    value={currentExperiment?.defaultBuffer || ''}
-                    onChange={(e) => setDefaultBuffer(e.target.value || undefined)}
-                    className={styles.bufferSelect}
-                  >
-                    <option value="">{t('toolbar.noBuffer', language)}</option>
-                    {bufferTubes.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <button className={styles.addTubeBtn} onClick={() => setShowTubeSelector(true)}>
-                  {t('toolbar.addFromWarehouse', language)}
-                </button>
-
-                <button className={styles.addTubeBtn} onClick={handleCreateIntermediate}>
-                  {t('toolbar.newTube', language)}
-                </button>
-
-                <button className={styles.addTubeBtn} onClick={handleCreateSample}>
-                  {t('toolbar.newSample', language)}
-                </button>
-
-                <button className={styles.wasteAddBtn} onClick={handleCreateWaste}>
-                  {t('toolbar.newWasteTube', language)}
-                </button>
-
-                <button className={styles.saveBtn} onClick={handleSaveExperiment}>
-                  💾 {t('toolbar.save', language)}
-                </button>
-
-                <button className={styles.saveBtn} onClick={() => setShowSaveAs(true)}>
-                  📄 {t('toolbar.saveAs', language)}
-                </button>
-
-                <div className={styles.dateSection}>
-                  <input
-                    type="text"
-                    value={experimentDate}
-                    onChange={(e) => setExperimentDate(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                    className={styles.dateInput}
-                    placeholder="YYMMDD"
-                    maxLength={6}
-                  />
-                  <label className={styles.quickNamingLabel}>
-                    <input
-                      type="checkbox"
-                      checked={quickNaming}
-                      onChange={(e) => setQuickNaming(e.target.checked)}
-                    />
-                    {t('toolbar.quickNaming', language)}
+                {/* === 添加区 === */}
+                <div className={styles.toolbarSection}>
+                  <label className={styles.bufferLabel}>
+                    {t('toolbar.defaultBuffer', language)}
+                    <select
+                      value={currentExperiment?.defaultBuffer || ''}
+                      onChange={(e) => setDefaultBuffer(e.target.value || undefined)}
+                      className={styles.bufferSelect}
+                    >
+                      <option value="">{t('toolbar.noBuffer', language)}</option>
+                      {bufferTubes.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
                   </label>
+
+                  <button className={styles.toolbarBtn} onClick={() => setShowTubeSelector(true)}>
+                    {t('toolbar.addFromWarehouse', language)}
+                  </button>
+
+                  <button className={styles.toolbarBtn} onClick={handleCreateIntermediate}>
+                    {t('toolbar.newTube', language)}
+                  </button>
+
+                  <button className={styles.toolbarBtn} onClick={handleCreateSample}>
+                    {t('toolbar.newSample', language)}
+                  </button>
+
+                  <button className={styles.toolbarBtn} onClick={handleCreateWaste}>
+                    {t('toolbar.newWasteTube', language)}
+                  </button>
                 </div>
 
-                <button className={styles.completeBtn} onClick={handleCompleteExperiment}>
-                  {t('toolbar.endExperiment', language)}
-                </button>
+                <div className={styles.toolbarDivider} />
 
-                <button className={styles.checkBtn} onClick={handleCheckExperiment}>
-                  🔍 {t('toolbar.check', language)}
-                </button>
+                {/* === 操作区 === */}
+                <div className={styles.toolbarSection}>
+                  <div className={styles.dateSection}>
+                    <input
+                      type="text"
+                      value={experimentDate}
+                      onChange={(e) => setExperimentDate(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                      className={styles.dateInput}
+                      placeholder="YYMMDD"
+                      maxLength={6}
+                    />
+                    <label className={styles.quickNamingLabel}>
+                      <input
+                        type="checkbox"
+                        checked={quickNaming}
+                        onChange={(e) => setQuickNaming(e.target.checked)}
+                      />
+                      {t('toolbar.quickNaming', language)}
+                    </label>
+                  </div>
 
-                <button className={styles.refreshBtn} onClick={handleRefreshExperiment}>
-                  🔄 {t('toolbar.refresh', language)}
-                </button>
+                  <button className={styles.toolbarBtn} onClick={handleCheckExperiment}>
+                    🔍 {t('toolbar.check', language)}
+                  </button>
+
+                  <button className={styles.toolbarBtn} onClick={handleClearConfigOrders}>
+                    🧹 清空序号
+                  </button>
+
+                  <button className={styles.toolbarBtnAccent} onClick={handleCompleteExperiment}>
+                    {t('toolbar.endExperiment', language)}
+                  </button>
+
+                  <button className={styles.toolbarBtn} onClick={handleRefreshExperiment}>
+                    🔄 {t('toolbar.refresh', language)}
+                  </button>
+                </div>
+
+                <div className={styles.toolbarDivider} />
               </>
             )}
 
-            <button className={styles.newBtn} onClick={() => {
-              resetExperiment()
-              setNodes([])
-              setEdges([])
-            }}>
-              {t('toolbar.newExperiment', language)}
-            </button>
+            {/* === 工程区 === */}
+            <div className={styles.toolbarSection}>
+              <button className={styles.toolbarBtn} onClick={() => setShowExperimentManager(true)}>
+                📁 {t('toolbar.open', language)}
+              </button>
 
-            <button className={styles.wasteBtn} onClick={handleCreateWasteExperiment}>
-              {t('toolbar.newWaste', language)}
-            </button>
+              <button className={styles.toolbarBtn} onClick={() => {
+                resetExperiment()
+                setNodes([])
+                setEdges([])
+              }}>
+                {t('toolbar.newExperiment', language)}
+              </button>
 
-            <button className={styles.openBtn} onClick={() => setShowExperimentManager(true)}>
-              📁 {t('toolbar.open', language)}
-            </button>
+              <button className={styles.toolbarBtnWarn} onClick={handleCreateWasteExperiment}>
+                {t('toolbar.newWaste', language)}
+              </button>
+
+              {currentExperiment && (
+                <button className={styles.toolbarBtn} onClick={() => setShowSaveAs(true)}>
+                  📄 {t('toolbar.saveAs', language)}
+                </button>
+              )}
+
+              {!isReadOnly && (
+                <button className={styles.toolbarBtn} onClick={handleSaveExperiment}>
+                  💾 {t('toolbar.save', language)}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </header>
@@ -1397,7 +1477,7 @@ export default function ExperimentPage() {
                   <li><strong>选中后按 Delete 删除</strong></li>
                 </ul>
                 {isReadOnly && (
-                  <p className={styles.readOnlyHint}>🔒 此实验已结束,无法修改</p>
+                  <p className={styles.readOnlyHint}>🔒 此实验已{currentExperiment?.status === 'reverted' ? '回退' : '结束'},无法修改</p>
                 )}
               </div>
             </Panel>
@@ -1413,15 +1493,28 @@ export default function ExperimentPage() {
 
       {/* 工程管理弹窗 */}
       {showExperimentManager && (
-        <div className={styles.modal} onClick={() => setShowExperimentManager(false)}>
+        <div className={styles.modal} onClick={() => { setShowExperimentManager(false); setExperimentSearch('') }}>
           <div className={styles.modalContentWide} onClick={e => e.stopPropagation()}>
             <h2 className={styles.modalTitle}>工程管理</h2>
 
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder="🔍 搜索工程名称..."
+              value={experimentSearch}
+              onChange={e => setExperimentSearch(e.target.value)}
+              autoFocus
+            />
+
             <div className={styles.experimentList}>
-              {experiments.length === 0 ? (
-                <div className={styles.emptyHint}>暂无保存的工程</div>
-              ) : (
-                experiments.map(exp => (
+              {(() => {
+                const filtered = experimentSearch.trim()
+                  ? experiments.filter(exp => exp.name.toLowerCase().includes(experimentSearch.trim().toLowerCase()))
+                  : experiments
+                if (filtered.length === 0) {
+                  return <div className={styles.emptyHint}>{experimentSearch.trim() ? '没有匹配的工程' : '暂无保存的工程'}</div>
+                }
+                return filtered.map(exp => (
                   <div key={exp.id} className={styles.experimentItem}>
                     <div className={styles.experimentItemInfo}>
                       <h3>
@@ -1450,11 +1543,11 @@ export default function ExperimentPage() {
                     </div>
                   </div>
                 ))
-              )}
+              })()}
             </div>
 
             <div className={styles.formActions}>
-              <button className={styles.cancelBtn} onClick={() => setShowExperimentManager(false)}>
+              <button className={styles.cancelBtn} onClick={() => { setShowExperimentManager(false); setExperimentSearch('') }}>
                 关闭
               </button>
             </div>
@@ -1541,6 +1634,12 @@ export default function ExperimentPage() {
             {isReadOnly && (
               <div className={styles.readOnlyNotice}>
                 {t('readOnly.notice', language)}
+              </div>
+            )}
+            {isReadOnly && editingTube.type === 'intermediate' && editingTube.tubeNumber && (
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>管号</label>
+                <div className={styles.readOnlyValue}>{editingTube.tubeNumber}</div>
               </div>
             )}
 
@@ -1717,18 +1816,34 @@ export default function ExperimentPage() {
                         <p className={styles.hint}>按序号从小到大生成实验步骤(讲述者功能)</p>
                       </div>
                     )}
+
+                    {/* 管号 - 中间产物且非作为原料的试管显示 */}
+                    {editingTube.type === 'intermediate' && !editFormData.asSource && !isReadOnly && (
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>管号</label>
+                        <input
+                          type="text"
+                          className={styles.formInput}
+                          value={editFormData.tubeNumber}
+                          onChange={(e) => setEditFormData({ ...editFormData, tubeNumber: e.target.value })}
+                          placeholder="#1 (最多5个字符)"
+                          maxLength={5}
+                        />
+                        <p className={styles.hint}>管号仅存储在当前实验工程中,默认以#开头</p>
+                      </div>
+                    )}
                   </>
                 )}
               </>
             )}
 
             <div className={styles.formActions}>
-              {!isReadOnly && editingTube.type !== 'source' && (
+              {!isReadOnly && (
                 <button
                   className={styles.deleteTubeBtn}
                   onClick={() => handleDeleteTube(editingTube.id)}
                 >
-                  🗑️ 删除试管
+                  🗑️ {editingTube.type === 'source' ? '移除试管' : '删除试管'}
                 </button>
               )}
               <button className={styles.cancelBtn} onClick={() => setEditingTube(null)}>
@@ -1744,6 +1859,49 @@ export default function ExperimentPage() {
                   保存
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 连接线编辑弹窗 */}
+      {editingEdge && (
+        <div className={styles.modal} onClick={() => setEditingEdge(null)}>
+          <div className={styles.editModalContent} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>移液连接线</h3>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>移液体积</label>
+              <div className={styles.formRow}>
+                <input
+                  type="number"
+                  value={editingEdge.volume}
+                  disabled
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                />
+                <select value={editingEdge.volumeUnit} disabled style={{ opacity: 0.6, cursor: 'not-allowed' }}>
+                  <option value="nL">nL</option>
+                  <option value="μL">μL</option>
+                  <option value="mL">mL</option>
+                </select>
+              </div>
+              <p className={styles.hint}>体积编辑功能暂未开放</p>
+            </div>
+
+            <div className={styles.formActions}>
+              {!isReadOnly && (
+                <button className={styles.deleteTubeBtn} onClick={handleDeleteEdge}>
+                  🗑️ 删除连线
+                </button>
+              )}
+              <button className={styles.cancelBtn} onClick={() => setEditingEdge(null)}>
+                取消
+              </button>
+              <button className={styles.submitBtn} onClick={() => setEditingEdge(null)} disabled>
+                保存
+              </button>
             </div>
           </div>
         </div>

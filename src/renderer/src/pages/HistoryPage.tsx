@@ -41,7 +41,7 @@ export default function HistoryPage() {
         // 加载回退后的实验
         loadExperiment(id)
         // 跳转到实验模拟页面
-        navigate('/')
+        navigate('/experiment')
         alert('实验已回退，试剂仓库已恢复')
       }
     }

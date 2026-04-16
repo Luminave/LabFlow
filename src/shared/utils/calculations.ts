@@ -5,6 +5,17 @@
 import { Substance, Tube, CalculationRequest, CalculationResult, VolumeUnit } from '../types'
 
 /**
+ * 将体积四舍五入到指定小数位，避免浮点精度问题
+ * @param volume 体积值
+ * @param decimals 小数位数，默认 3
+ */
+export function roundVolume(volume: number, decimals: number = 3): number {
+  if (!isFinite(volume)) return volume
+  const factor = Math.pow(10, decimals)
+  return Math.round(volume * factor) / factor
+}
+
+/**
  * 浓度单位转换因子 (统一转换为 μM)
  */
 const CONCENTRATION_FACTORS: Record<string, number> = {

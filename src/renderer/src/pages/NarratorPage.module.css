@@ -73,6 +73,23 @@
   margin-top: 8px;
 }
 
+.toggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggleLabel input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 .tubeList {
   display: flex;
   flex-direction: column;

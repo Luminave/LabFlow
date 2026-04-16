@@ -6,6 +6,8 @@ export default function NarratorPage() {
   const { experiments, fetchExperiments } = useExperimentStore()
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>('')
   const [narratedSteps, setNarratedSteps] = useState<string>('')
+  const [copied, setCopied] = useState(false)
+  const [useTubeNumber, setUseTubeNumber] = useState(false) // 使用管号替代试管名称
 
   // 加载实验数据
   useEffect(() => {
@@ -37,6 +39,15 @@ export default function NarratorPage() {
     })
   }, [selectedExperimentId, experiments])
 
+  // 获取试管显示名称（管号或名称）
+  const getDisplayName = (tube: { name: string; tubeNumber?: string }) => {
+    if (useTubeNumber && tube.tubeNumber) {
+      // 确保管号以#开头
+      return tube.tubeNumber.startsWith('#') ? tube.tubeNumber : '#' + tube.tubeNumber
+    }
+    return tube.name
+  }
+
   // 选择实验后自动生成讲述
   useEffect(() => {
     if (selectedExperimentId && sortedTubes.length > 0) {
@@ -44,7 +55,7 @@ export default function NarratorPage() {
     } else {
       setNarratedSteps('')
     }
-  }, [selectedExperimentId, sortedTubes])
+  }, [selectedExperimentId, sortedTubes, useTubeNumber])
 
   // 生成讲述步骤
   const generateNarration = () => {
@@ -117,13 +128,13 @@ export default function NarratorPage() {
       // Step 标题
       const volumeStr = `${totalVolume}μL`
       const substancesStr = substanceInfo.length > 0 ? substanceInfo.join(';') : '空'
-      steps.push(`Step${stepIndex + 1}: ${narratorTube.name}   ${volumeStr}   (${substancesStr})`)
+      steps.push(`Step${stepIndex + 1}: ${getDisplayName(narratorTube)}   ${volumeStr}   (${substancesStr})`)
 
       // 小步骤（已按体积从大到小排序）
       incomingConnections.forEach((conn, lineIndex) => {
         const sourceTube = tubes.find(t => t.id === conn.fromTubeId)
         if (sourceTube) {
-          steps.push(`(${lineIndex + 1}) ${sourceTube.name}→${conn.volume} μL→${narratorTube.name}`)
+          steps.push(`(${lineIndex + 1}) ${getDisplayName(sourceTube)}→${conn.volume} μL→${getDisplayName(narratorTube)}`)
         }
       })
 
@@ -139,6 +150,14 @@ export default function NarratorPage() {
         <h1 className={styles.title}>📖 讲述者</h1>
         <p className={styles.subtitle}>选择实验工程，按配置序号生成实验操作步骤</p>
         <p className={styles.hint}>💡 提示：回退的工程需要另存为新工程之后才能使用讲述者</p>
+        <label className={styles.toggleLabel}>
+          <input
+            type="checkbox"
+            checked={useTubeNumber}
+            onChange={e => setUseTubeNumber(e.target.checked)}
+          />
+          使用管号
+        </label>
       </header>
 
       <div className={styles.content}>
@@ -202,9 +221,13 @@ export default function NarratorPage() {
               <pre className={styles.stepsText}>{narratedSteps}</pre>
               <button
                 className={styles.copyBtn}
-                onClick={() => navigator.clipboard.writeText(narratedSteps)}
+                onClick={() => {
+                  navigator.clipboard.writeText(narratedSteps)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
               >
-                📋 复制
+                {copied ? '✅ 已复制' : '📋 复制'}
               </button>
             </div>
           </div>
