@@ -2,6 +2,13 @@
 
 > A visual laboratory reagent management and experiment workflow simulator — making experiment design more intuitive and efficient
 
+## 🆕 What's New in v0.2.3
+
+- 🐛 **Fix**: Narrator page could not be scrolled with mouse wheel
+- 🐛 **Fix**: Data Backup page could not be scrolled with mouse wheel
+
+---
+
 ## 🆕 What's New in v0.2.0
 
 - 🏠 **Brand New Home Page**: Clock, search, daily quotes — a welcoming start every time
