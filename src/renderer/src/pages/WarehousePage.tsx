@@ -80,9 +80,7 @@ export default function WarehousePage() {
     // 添加所有已创建的分组（包括空的），隐藏的分组不显示（除非开启显示隐藏）
     for (const group of groups) {
       if (group.hidden && !showHidden) {
-        // 隐藏分组中的试管移到未分组
-        const hiddenTubes = groupMap.get(group.id) || []
-        ungrouped.push(...hiddenTubes)
+        // 隐藏分组及其试管，不显示
       } else {
         grouped.push({ group, tubes: groupMap.get(group.id) || [] })
       }
