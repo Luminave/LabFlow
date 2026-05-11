@@ -84,6 +84,7 @@ export default function ExperimentPage() {
   }
   const [experimentDate, setExperimentDate] = useState(getTodayDate())
   const [quickNaming, setQuickNaming] = useState(true) // 快捷试管命名,默认启用
+  const [syncTubeName, setSyncTubeName] = useState(false) // 同步修改试管名称
 
   // 动态计算结束状态
   const calculateEndStateDynamic = (tubes: Tube[], conns: TransferConnection[]): Tube[] => {
@@ -687,6 +688,9 @@ export default function ExperimentPage() {
     // 双击不弹出输入框,保留数字显示和拖动功能
   }, [])
 
+  // 浓度单位转μM的因子
+  const concToUM: Record<string, number> = { 'nM': 0.001, 'μM': 1, 'mM': 1000, 'M': 1000000 }
+
   // 计算目标试管的物质组成
   const recalculateTargetTube = (targetId: string) => {
     const incomingConns = connections.filter(c => c.toTubeId === targetId)
@@ -704,7 +708,8 @@ export default function ExperimentPage() {
       totalVolume += vol
 
       for (const sub of sourceTube.substances) {
-        const moles = sub.concentration * vol
+        const concInUM = sub.concentration * (concToUM[sub.concentrationUnit] || 1)
+        const moles = concInUM * vol
         const existing = substanceMap.get(sub.name)
         if (existing) {
           existing.moles += moles
@@ -716,9 +721,11 @@ export default function ExperimentPage() {
 
     const newSubstances: Substance[] = []
     substanceMap.forEach((data, name) => {
+      const finalConcUM = data.moles / totalVolume
+      const factor = concToUM[data.unit as string] || 1
       newSubstances.push({
         name,
-        concentration: Math.round((data.moles / totalVolume) * 1000) / 1000,
+        concentration: Math.round((finalConcUM / factor) * 1000) / 1000,
         concentrationUnit: data.unit as ConcentrationUnit
       })
     })
@@ -832,8 +839,14 @@ export default function ExperimentPage() {
       return
     }
 
+    // 同步名称:如果启用且有管号,自动设置名称为 日期-管号
+    let finalName = trimmedName
+    if (syncTubeName && tubeNumber && editingTube.type === 'intermediate') {
+      finalName = `${experimentDate}-${tubeNumber}`
+    }
+
     const updates: Partial<Tube> = {
-      name: trimmedName,
+      name: finalName,
       totalVolume: editFormData.targetVolume,
       totalVolumeUnit: editFormData.targetVolumeUnit,
       substances: editFormData.substances,
@@ -885,7 +898,10 @@ export default function ExperimentPage() {
         const sourceSub = sourceTube.substances.find(s => s.name === targetSub.name)
         if (!sourceSub) continue
 
-        const requiredVolume = (targetSub.concentration * targetVolume) / sourceSub.concentration
+        // 标准化浓度到μM再计算
+        const targetConcUM = targetSub.concentration * (concToUM[targetSub.concentrationUnit] || 1)
+        const sourceConcUM = sourceSub.concentration * (concToUM[sourceSub.concentrationUnit] || 1)
+        const requiredVolume = (targetConcUM * targetVolume) / sourceConcUM
         const existingVolume = sourceTubeVolumes.get(conn.fromTubeId) || 0
         sourceTubeVolumes.set(conn.fromTubeId, Math.max(existingVolume, requiredVolume))
 
@@ -1389,6 +1405,14 @@ export default function ExperimentPage() {
                         onChange={(e) => setQuickNaming(e.target.checked)}
                       />
                       {t('toolbar.quickNaming', language)}
+                    </label>
+                    <label className={styles.quickNamingLabel}>
+                      <input
+                        type="checkbox"
+                        checked={syncTubeName}
+                        onChange={(e) => setSyncTubeName(e.target.checked)}
+                      />
+                      {language === 'zh' ? '同步名称' : 'Sync Name'}
                     </label>
                   </div>
 
