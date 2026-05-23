@@ -443,6 +443,25 @@ export default function ExperimentPage() {
     loadSavedExperiment()
   }, [fetchExperiments, fetchTubes, loadSavedExperiment])
 
+  // 组件卸载时自动保存，防止未保存的数据丢失
+  useEffect(() => {
+    return () => {
+      const { currentExperiment, currentTubes, connections, tubePositions } = useExperimentStore.getState()
+      if (currentExperiment) {
+        try {
+          localStorage.setItem('labflow_current_experiment', JSON.stringify({
+            currentExperiment,
+            currentTubes,
+            connections,
+            tubePositions
+          }))
+        } catch (e) {
+          console.error('Failed to save on unmount:', e)
+        }
+      }
+    }
+  }, [])
+
   // 键盘事件处理 - Delete键删除选中的节点或边
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

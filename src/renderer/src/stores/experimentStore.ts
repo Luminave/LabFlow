@@ -464,7 +464,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveExperimentsToStorage(newExperiments)
       
       set({ experiments: newExperiments, currentExperiment: experiment })
-      saveCurrentExperimentToStorage({ ...state, currentExperiment: experiment })
+      // 使用 experiment 中的最新数据保存，而不是旧的 state
+      saveCurrentExperimentToStorage({
+        currentExperiment: experiment,
+        currentTubes: experiment.tubes,
+        connections: experiment.connections,
+        tubePositions: experiment.tubePositions
+      })
     } catch (e) {
       console.error('Failed to save experiment:', e)
     }
@@ -499,7 +505,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveExperimentsToStorage(newExperiments)
       
       set({ experiments: newExperiments, currentExperiment: newExperiment })
-      saveCurrentExperimentToStorage({ ...state, currentExperiment: newExperiment })
+      // 使用 newExperiment 中的最新数据保存
+      saveCurrentExperimentToStorage({
+        currentExperiment: newExperiment,
+        currentTubes: newExperiment.tubes,
+        connections: newExperiment.connections,
+        tubePositions: newExperiment.tubePositions
+      })
     } catch (e) {
       console.error('Failed to save as experiment:', e)
     }
