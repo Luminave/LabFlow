@@ -11,6 +11,53 @@ const CURRENT_EXPERIMENT_KEY = 'labflow_current_experiment'
 const TUBE_HISTORIES_KEY = 'labflow_tube_histories'
 const EXPERIMENTS_KEY = 'labflow_experiments' // 实验记录的 localStorage key
 
+// ==================== 自动保存防抖机制 ====================
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+const AUTO_SAVE_DELAY = 2000 // 2秒防抖
+
+/**
+ * 防抖自动保存：修改操作后 2 秒自动保存到数据库
+ * 防止用户忘记点保存按钮导致数据丢失
+ */
+function debouncedAutoSave(get: () => ExperimentState) {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    const state = get()
+    if (!state.currentExperiment) return
+    
+    const experiment: Experiment = {
+      ...state.currentExperiment,
+      tubes: state.currentTubes,
+      tubePositions: state.tubePositions,
+      connections: state.connections,
+      updatedAt: new Date().toISOString()
+    }
+    
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.saveExperiment(experimentToDb(experiment))
+        console.log('[AutoSave] Experiment saved to database')
+      }
+      
+      // 同步更新 experiments 数组
+      const experiments = get().experiments
+      const existingIndex = experiments.findIndex(e => e.id === experiment.id)
+      let newExperiments: Experiment[]
+      if (existingIndex >= 0) {
+        newExperiments = experiments.map(e => e.id === experiment.id ? experiment : e)
+      } else {
+        newExperiments = [...experiments, experiment]
+      }
+      
+      saveExperimentsToStorage(newExperiments)
+      // 注意：不调用 set() 避免循环触发，只更新 experiments 数组
+      // currentExperiment/currentTubes 等已经在各操作中更新过了
+    } catch (e) {
+      console.error('[AutoSave] Failed to save experiment:', e)
+    }
+  }, AUTO_SAVE_DELAY)
+}
+
 // 计算试管结束状态的辅助函数
 function calculateEndState(tubes: Tube[], connections: TransferConnection[]): Tube[] {
   // 计算每个试管的移入和移出体积
@@ -571,6 +618,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   addIntermediateTube: (tube) => {
@@ -586,6 +634,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   addBufferTube: (tube) => {
@@ -599,6 +648,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   addSampleTube: (tube) => {
@@ -611,6 +661,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   addWasteTube: (tube) => {
@@ -622,6 +673,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   removeTube: (tubeId) => {
@@ -641,6 +693,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage(newState)
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   updateTubeInExperiment: (tubeId, updates) => {
@@ -651,6 +704,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...newState, connections: state.connections, tubePositions: state.tubePositions })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   addConnection: (connectionData) => {
@@ -695,6 +749,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, ...newState })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   updateConnection: (id, updates) => {
@@ -705,6 +760,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, ...newState })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   removeConnection: (id) => {
@@ -715,6 +771,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, ...newState })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   updateTubePosition: (tubeId, x, y) => {
@@ -727,6 +784,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, ...newState })
       return newState
     })
+    debouncedAutoSave(get)
   },
   
   completeExperiment: async () => {
@@ -1212,20 +1270,38 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   fetchExperiments: async () => {
     set({ loading: true, error: null })
     try {
+      let experiments: Experiment[]
       if (window.electronAPI) {
         const records = await window.electronAPI.getExperiments()
-        const experiments = records.map(dbToExperiment)
-        // 同时保存到 localStorage 作为备份
-        saveExperimentsToStorage(experiments)
-        set({ experiments, loading: false })
+        experiments = records.map(dbToExperiment)
       } else {
-        // 降级到 localStorage
-        const experiments = loadExperimentsFromStorage()
-        set({ experiments, loading: false })
+        experiments = loadExperimentsFromStorage()
       }
+      
+      // 合并：如果当前正在编辑的实验在列表中，用当前最新的数据覆盖
+      const currentState = get()
+      if (currentState.currentExperiment) {
+        const currentId = currentState.currentExperiment.id
+        const latestExperiment: Experiment = {
+          ...currentState.currentExperiment,
+          tubes: currentState.currentTubes,
+          tubePositions: currentState.tubePositions,
+          connections: currentState.connections,
+          updatedAt: new Date().toISOString()
+        }
+        const existingIndex = experiments.findIndex(e => e.id === currentId)
+        if (existingIndex >= 0) {
+          // 用当前最新的数据覆盖数据库中的旧数据
+          experiments[existingIndex] = latestExperiment
+        } else {
+          experiments.unshift(latestExperiment)
+        }
+      }
+      
+      saveExperimentsToStorage(experiments)
+      set({ experiments, loading: false })
     } catch (error) {
       console.error('Failed to fetch experiments from database, trying localStorage:', error)
-      // 出错时尝试从 localStorage 加载
       const experiments = loadExperimentsFromStorage()
       set({ experiments, loading: false, error: (error as Error).message })
     }
@@ -1259,6 +1335,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, currentExperiment: updated })
       return { currentExperiment: updated }
     })
+    debouncedAutoSave(get)
   },
   
   setExperimentAsWaste: (isWaste) => {
@@ -1271,6 +1348,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       saveCurrentExperimentToStorage({ ...state, currentExperiment: updated })
       return { currentExperiment: updated }
     })
+    debouncedAutoSave(get)
   }
 }))
 

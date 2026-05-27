@@ -433,8 +433,19 @@ export default function ExperimentPage() {
       return tube
     })
 
-    // 更新实验数据
-    set({ currentTubes: newTubes })
+    // 逐个更新试管（会同时更新 store 和 localStorage）
+    for (const tube of newTubes) {
+      updateTubeInExperiment(tube.id, {
+        remainingVolume: tube.remainingVolume,
+        remainingVolumeUnit: tube.remainingVolumeUnit,
+        substances: tube.substances,
+        updatedAt: tube.updatedAt
+      })
+    }
+    
+    // 立即保存到数据库（不等防抖）
+    saveCurrentExperiment()
+    
     alert(language === 'zh' ? '工程已刷新！' : 'Project refreshed!')
   }
   useEffect(() => {
@@ -449,12 +460,40 @@ export default function ExperimentPage() {
       const { currentExperiment, currentTubes, connections, tubePositions } = useExperimentStore.getState()
       if (currentExperiment) {
         try {
+          // 1. 保存到 localStorage（同步，立即生效）
           localStorage.setItem('labflow_current_experiment', JSON.stringify({
             currentExperiment,
             currentTubes,
             connections,
             tubePositions
           }))
+          
+          // 2. 保存到数据库（同步发起，不等待完成）
+          if (window.electronAPI) {
+            const experimentForDb = {
+              ...currentExperiment,
+              tubes: currentTubes,
+              tubePositions,
+              connections,
+              updatedAt: new Date().toISOString()
+            }
+            window.electronAPI.saveExperiment({
+              id: experimentForDb.id,
+              name: experimentForDb.name,
+              description: experimentForDb.description || null,
+              created_at: experimentForDb.createdAt,
+              updated_at: experimentForDb.updatedAt,
+              completed_at: experimentForDb.completedAt || null,
+              status: experimentForDb.status,
+              tubes: JSON.stringify(experimentForDb.tubes),
+              tube_positions: JSON.stringify(experimentForDb.tubePositions || []),
+              connections: JSON.stringify(experimentForDb.connections),
+              warehouse_snapshot: experimentForDb.warehouseSnapshot ? JSON.stringify(experimentForDb.warehouseSnapshot) : null,
+              initial_state_tubes: experimentForDb.initialStateTubes ? JSON.stringify(experimentForDb.initialStateTubes) : null,
+              end_state_tubes: experimentForDb.endStateTubes ? JSON.stringify(experimentForDb.endStateTubes) : null,
+              is_waste: experimentForDb.isWaste ? 1 : 0
+            }).catch((e: any) => console.error('Failed to save on unmount:', e))
+          }
         } catch (e) {
           console.error('Failed to save on unmount:', e)
         }
