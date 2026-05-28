@@ -1244,9 +1244,13 @@ export default function ExperimentPage() {
   }
 
   // 保存实验
-  const handleSaveExperiment = () => {
-    saveCurrentExperiment()
-    alert('实验已保存!')
+  const handleSaveExperiment = async () => {
+    const success = await saveCurrentExperiment()
+    if (success === false) {
+      alert(language === 'zh' ? '⚠️ 数据库保存失败，已保存到本地存储。请检查控制台日志。' : '⚠️ Database save failed, saved to local storage. Check console for details.')
+    } else {
+      alert(language === 'zh' ? '实验已保存!' : 'Experiment saved!')
+    }
   }
 
   // 另存为

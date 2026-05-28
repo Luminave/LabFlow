@@ -36,7 +36,7 @@ function debouncedAutoSave(get: () => ExperimentState) {
     try {
       if (window.electronAPI) {
         await window.electronAPI.saveExperiment(experimentToDb(experiment))
-        console.log('[AutoSave] Experiment saved to database')
+        console.log('[AutoSave] Experiment saved to database, id:', experiment.id)
       }
       
       // 同步更新 experiments 数组
@@ -53,7 +53,18 @@ function debouncedAutoSave(get: () => ExperimentState) {
       // 注意：不调用 set() 避免循环触发，只更新 experiments 数组
       // currentExperiment/currentTubes 等已经在各操作中更新过了
     } catch (e) {
-      console.error('[AutoSave] Failed to save experiment:', e)
+      console.error('[AutoSave] Failed to save experiment to DB:', e)
+      // DB 失败时仍然保存到 localStorage
+      const experiments = get().experiments
+      const existingIndex = experiments.findIndex(ee => ee.id === experiment.id)
+      let newExperiments: Experiment[]
+      if (existingIndex >= 0) {
+        newExperiments = experiments.map(ee => ee.id === experiment.id ? experiment : ee)
+      } else {
+        newExperiments = [...experiments, experiment]
+      }
+      saveExperimentsToStorage(newExperiments)
+      console.log('[AutoSave] Saved to localStorage as fallback')
     }
   }, AUTO_SAVE_DELAY)
 }
@@ -167,7 +178,7 @@ interface ExperimentState {
   error: string | null
   
   createNewExperiment: (name: string, description?: string) => void
-  saveCurrentExperiment: (name?: string) => void
+  saveCurrentExperiment: (name?: string) => Promise<boolean | void>
   saveAsExperiment: (newName: string) => void
   loadExperiment: (id: string) => void
   deleteExperiment: (id: string) => void
@@ -494,7 +505,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     
     try {
       if (window.electronAPI) {
+        console.log('[saveCurrentExperiment] Saving to DB, id:', experiment.id, 'name:', experiment.name)
         await window.electronAPI.saveExperiment(experimentToDb(experiment))
+        console.log('[saveCurrentExperiment] DB save success')
       }
       
       const experiments = get().experiments
@@ -518,8 +531,29 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         connections: experiment.connections,
         tubePositions: experiment.tubePositions
       })
+      console.log('[saveCurrentExperiment] Store updated, experiments count:', newExperiments.length)
+      return true
     } catch (e) {
-      console.error('Failed to save experiment:', e)
+      console.error('[saveCurrentExperiment] Failed to save experiment:', e)
+      // 即使 DB 保存失败，也更新 store 和 localStorage
+      const experiments = get().experiments
+      const existingIndex = experiments.findIndex(ee => ee.id === experiment.id)
+      let newExperiments: Experiment[]
+      if (existingIndex >= 0) {
+        newExperiments = experiments.map(ee => ee.id === experiment.id ? experiment : ee)
+      } else {
+        newExperiments = [...experiments, experiment]
+      }
+      saveExperimentsToStorage(newExperiments)
+      set({ experiments: newExperiments, currentExperiment: experiment })
+      saveCurrentExperimentToStorage({
+        currentExperiment: experiment,
+        currentTubes: experiment.tubes,
+        connections: experiment.connections,
+        tubePositions: experiment.tubePositions
+      })
+      console.log('[saveCurrentExperiment] Saved to store+localStorage despite DB error')
+      return false
     }
   },
 
@@ -1274,8 +1308,10 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       if (window.electronAPI) {
         const records = await window.electronAPI.getExperiments()
         experiments = records.map(dbToExperiment)
+        console.log('[fetchExperiments] Loaded from DB:', experiments.length, 'experiments')
       } else {
         experiments = loadExperimentsFromStorage()
+        console.log('[fetchExperiments] Loaded from localStorage:', experiments.length, 'experiments')
       }
       
       // 合并：如果当前正在编辑的实验在列表中，用当前最新的数据覆盖
@@ -1296,13 +1332,35 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         } else {
           experiments.unshift(latestExperiment)
         }
+        console.log('[fetchExperiments] Merged current experiment, total:', experiments.length)
       }
       
       saveExperimentsToStorage(experiments)
       set({ experiments, loading: false })
     } catch (error) {
-      console.error('Failed to fetch experiments from database, trying localStorage:', error)
-      const experiments = loadExperimentsFromStorage()
+      console.error('[fetchExperiments] Failed to fetch from database, trying localStorage:', error)
+      let experiments = loadExperimentsFromStorage()
+      
+      // 即使 DB 加载失败，也要合并当前实验
+      const currentState = get()
+      if (currentState.currentExperiment) {
+        const currentId = currentState.currentExperiment.id
+        const latestExperiment: Experiment = {
+          ...currentState.currentExperiment,
+          tubes: currentState.currentTubes,
+          tubePositions: currentState.tubePositions,
+          connections: currentState.connections,
+          updatedAt: new Date().toISOString()
+        }
+        const existingIndex = experiments.findIndex(e => e.id === currentId)
+        if (existingIndex >= 0) {
+          experiments[existingIndex] = latestExperiment
+        } else {
+          experiments.unshift(latestExperiment)
+        }
+      }
+      
+      saveExperimentsToStorage(experiments)
       set({ experiments, loading: false, error: (error as Error).message })
     }
   },
@@ -1314,14 +1372,27 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   
   loadSavedExperiment: () => {
     const saved = loadCurrentExperimentFromStorage()
-    if (saved) {
+    if (saved && saved.currentExperiment) {
+      // 同时将加载的实验合并到 experiments 列表中
+      // 防止 fetchExperiments 先执行但找不到当前实验的情况
+      const experiments = get().experiments
+      const existingIndex = experiments.findIndex(e => e.id === saved.currentExperiment!.id)
+      let newExperiments: Experiment[]
+      if (existingIndex >= 0) {
+        newExperiments = experiments.map(e => e.id === saved.currentExperiment!.id ? saved.currentExperiment! : e)
+      } else {
+        newExperiments = [...experiments, saved.currentExperiment!]
+      }
+      
       set({
         currentExperiment: saved.currentExperiment,
         currentTubes: saved.currentTubes,
         connections: saved.connections,
         tubePositions: saved.tubePositions || [],
+        experiments: newExperiments,
         showEndState: false
       })
+      console.log('[loadSavedExperiment] Restored experiment:', saved.currentExperiment.name, 'experiments count:', newExperiments.length)
     }
   },
   
