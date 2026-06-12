@@ -170,9 +170,9 @@ export default function WarehousePage() {
       // store 内部已处理数据库写入，无需重复调用
       await addTube(data)
       setShowAddForm(false)
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to add tube:', e)
-      alert('添加试剂失败，请重试')
+      alert('添加试剂失败: ' + (e.message || e.toString()))
     }
   }
   
