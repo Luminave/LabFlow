@@ -166,37 +166,31 @@ export default function WarehousePage() {
   }
   
   const handleAddTube = async (data: any) => {
-    // 先添加到 store
-    const tube = await addTube(data)
-    
-    // 再保存到数据库
-    if (window.electronAPI) {
-      try {
-        await window.electronAPI.addTube(tube)
-        console.log('Tube saved to database:', tube.id)
-      } catch (e) {
-        console.error('Failed to save tube:', e)
-      }
+    try {
+      // store 内部已处理数据库写入，无需重复调用
+      await addTube(data)
+      setShowAddForm(false)
+    } catch (e) {
+      console.error('Failed to add tube:', e)
+      alert('添加试剂失败，请重试')
     }
-    
-    setShowAddForm(false)
   }
   
   const handleDeleteTube = async (id: string) => {
-    deleteTube(id)
-    if (window.electronAPI) {
-      await window.electronAPI.deleteTube(id)
+    try {
+      await deleteTube(id)
+    } catch (e) {
+      console.error('Failed to delete tube:', e)
+      alert('删除试剂失败，请重试')
     }
   }
   
   const handleStatusChange = async (id: string, status: string) => {
-    const tube = tubes.find(t => t.id === id)
-    if (!tube) return
-    
-    updateTubeStatus(id, status as any)
-    
-    if (window.electronAPI) {
-      await window.electronAPI.updateTube({ ...tube, status })
+    try {
+      await updateTubeStatus(id, status as any)
+    } catch (e) {
+      console.error('Failed to update tube status:', e)
+      alert('更新状态失败，请重试')
     }
   }
   
@@ -331,11 +325,13 @@ export default function WarehousePage() {
           onClose={() => setEditingTube(null)}
           onSave={async (updatedTube: any) => {
             const { id, ...updates } = updatedTube
-            updateTube(id, updates)
-            if (window.electronAPI) {
-              await window.electronAPI.updateTube(updatedTube)
+            try {
+              await updateTube(id, updates)
+              setEditingTube(null)
+            } catch (e) {
+              console.error('Failed to update tube:', e)
+              alert('保存失败，请重试')
             }
-            setEditingTube(null)
           }}
           groups={groups}
         />

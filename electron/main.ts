@@ -173,9 +173,9 @@ ipcMain.handle('db:getTube', async (_, id: string) => {
 
 ipcMain.handle('db:addTube', async (_, tube: any) => {
   db.run(
-    `INSERT INTO tubes (id, name, type, total_volume, total_volume_unit, remaining_volume, remaining_volume_unit, substances, created_at, updated_at, status, storage_location, storage_condition, notes, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [tube.id, tube.name, tube.type, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.createdAt, tube.updatedAt, tube.status || 'active', tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || [])]
+    `INSERT INTO tubes (id, name, type, total_volume, total_volume_unit, remaining_volume, remaining_volume_unit, substances, created_at, updated_at, status, storage_location, storage_condition, notes, tags, group_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [tube.id, tube.name, tube.type, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.createdAt, tube.updatedAt, tube.status || 'active', tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.groupId || null]
   )
   saveDatabase()
   return tube

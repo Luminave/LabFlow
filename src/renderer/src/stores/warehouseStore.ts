@@ -51,14 +51,14 @@ function tubeToDb(tube: Tube): any {
     totalVolumeUnit: tube.totalVolumeUnit,
     remainingVolume: tube.remainingVolume,
     remainingVolumeUnit: tube.remainingVolumeUnit,
-    substances: JSON.stringify(tube.substances),
+    substances: tube.substances,  // main process 会做 JSON.stringify
     createdAt: tube.createdAt,
     updatedAt: tube.updatedAt,
     status: tube.status,
     storageLocation: tube.storageLocation || null,
     storageCondition: tube.storageCondition || null,
     notes: tube.notes || null,
-    tags: JSON.stringify(tube.tags || []),
+    tags: tube.tags || [],  // main process 会做 JSON.stringify
     groupId: tube.groupId || null
   }
 }
