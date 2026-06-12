@@ -114,8 +114,12 @@ function queryOne(sql: string, params: any[] = []): any | null {
 }
 
 async function createWindow() {
-  await initDatabase()
-  
+  try {
+    await initDatabase()
+  } catch (e) {
+    console.error('Database init failed:', e)
+  }
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -127,18 +131,20 @@ async function createWindow() {
       contextIsolation: true
     },
     titleBarStyle: 'default',
-    show: false
+    show: true
   })
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
+  mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription)
   })
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    const indexPath = path.join(__dirname, '../dist/index.html')
+    console.log('Loading index.html from:', indexPath)
+    mainWindow.loadFile(indexPath)
   }
 }
 
