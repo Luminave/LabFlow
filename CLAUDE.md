@@ -6,7 +6,7 @@
 - **项目路径**: D:\project\LabFlow
 - **GitHub**: https://github.com/Luminave/LabFlow
 - **GitHub 用户名**: Luminave
-- **当前版本**: v0.1.0
+- **当前版本**: v0.2.3
 - **Node.js**: 22
 
 ## 构建与启动
