@@ -45,6 +45,7 @@
   "build": {
     "appId": "com.labflow.app",
     "productName": "LabFlow",
+    "icon": "D:/project/LabFlow/build/icon.ico",
     "electronDist": "release/electron",
     "directories": {
       "output": "release"
@@ -58,6 +59,7 @@
       "category": "Science"
     },
     "win": {
+      "icon": "D:/project/LabFlow/build/icon.ico",
       "target": [
         {"target": "nsis", "arch": ["x64"]},
         {"target": "portable", "arch": ["x64"]}
@@ -72,6 +74,7 @@
       "category": "public.app-category.science"
     },
     "nsis": {
+      "installerIcon": "D:/project/LabFlow/build/icon.ico",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
