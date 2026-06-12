@@ -29,4 +29,6 @@ npm-debug.log*
 
 # Electron
 # release/
+release/electron/
+release/builder-debug.yml
 dist-electron/
