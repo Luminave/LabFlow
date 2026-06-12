@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import initSqlJs from 'sql.js'
@@ -258,4 +258,405 @@ ipcMain.handle('db:addTubeUsage', async (_, record: any) => {
   )
   saveDatabase()
   return record
+})
+
+// 清除所有数据库数据
+ipcMain.handle('db:clearAllData', async () => {
+  try {
+    db.run('DELETE FROM tube_usage_records')
+    db.run('DELETE FROM experiments')
+    db.run('DELETE FROM tubes')
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to clear database:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ==================== 备份系统 ====================
+
+const BACKUP_VERSION = '2.0.0'
+const MAX_SNAPSHOTS = 50
+const MANIFEST_FILENAME = 'manifest.json'
+
+interface SnapshotInfo {
+  id: string
+  timestamp: string
+  filename: string
+  localStorage: Record<string, string | null>
+  stats: { tubes: number; experiments: number; histories: number; groups: number }
+}
+
+interface Manifest {
+  snapshots: SnapshotInfo[]
+}
+
+// 自动备份定时器
+let autoBackupTimer: ReturnType<typeof setInterval> | null = null
+let autoBackupIntervalMs: number = 30 * 60 * 1000 // 默认 30 分钟
+
+function getBackupDir(): string {
+  const dir = path.join(app.getPath('userData'), 'backups')
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
+function readManifest(): Manifest {
+  const manifestPath = path.join(getBackupDir(), MANIFEST_FILENAME)
+  if (fs.existsSync(manifestPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'))
+    } catch {
+      return { snapshots: [] }
+    }
+  }
+  return { snapshots: [] }
+}
+
+function writeManifest(manifest: Manifest) {
+  const manifestPath = path.join(getBackupDir(), MANIFEST_FILENAME)
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+}
+
+function calculateDbStats(): { tubes: number; experiments: number; histories: number; groups: number } {
+  try {
+    const tubes = queryAll('SELECT COUNT(*) as count FROM tubes').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM tubes')[0].count : 0
+    const experiments = queryAll('SELECT COUNT(*) as count FROM experiments').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM experiments')[0].count : 0
+    const histories = queryAll('SELECT COUNT(*) as count FROM tube_usage_records').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM tube_usage_records')[0].count : 0
+    return { tubes, experiments, histories, groups: 0 }
+  } catch {
+    return { tubes: 0, experiments: 0, histories: 0, groups: 0 }
+  }
+}
+
+// 执行快照创建（主进程内部调用）
+async function performSnapshot(localStorageData?: Record<string, string | null>): Promise<SnapshotInfo | null> {
+  try {
+    const backupDir = getBackupDir()
+    const now = new Date()
+    const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `snapshot-${dateStr}.db`
+    const snapshotId = crypto.randomUUID()
+
+    // 复制数据库文件
+    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    if (!fs.existsSync(dbPath)) {
+      console.error('[Backup] Database file not found:', dbPath)
+      return null
+    }
+    fs.copyFileSync(dbPath, path.join(backupDir, filename))
+
+    // 统计信息（包含 groups 从 localStorage）
+    const stats = calculateDbStats()
+    if (localStorageData?.labflow_groups) {
+      try {
+        const groups = JSON.parse(localStorageData.labflow_groups)
+        stats.groups = Array.isArray(groups) ? groups.length : 0
+      } catch { /* ignore */ }
+    }
+
+    const snapshot: SnapshotInfo = {
+      id: snapshotId,
+      timestamp: now.toISOString(),
+      filename,
+      localStorage: localStorageData || {},
+      stats
+    }
+
+    // 更新 manifest
+    const manifest = readManifest()
+    manifest.snapshots.unshift(snapshot)
+    // 限制数量
+    while (manifest.snapshots.length > MAX_SNAPSHOTS) {
+      const removed = manifest.snapshots.pop()
+      if (removed) {
+        const oldPath = path.join(backupDir, removed.filename)
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
+      }
+    }
+    writeManifest(manifest)
+
+    console.log('[Backup] Snapshot created:', filename)
+    return snapshot
+  } catch (error) {
+    console.error('[Backup] Snapshot creation failed:', error)
+    return null
+  }
+}
+
+// 启动自动备份
+function startAutoBackup(intervalMs: number, localStorageData?: Record<string, string | null>) {
+  stopAutoBackup()
+  autoBackupIntervalMs = intervalMs
+  autoBackupTimer = setInterval(() => {
+    console.log('[AutoBackup] Creating snapshot...')
+    // 注意：自动备份时无法实时获取 localStorage 数据，使用上次传入的数据
+    // 这是可接受的，因为 DB 数据是最关键的
+    performSnapshot(localStorageData)
+  }, intervalMs)
+  console.log('[AutoBackup] Started with interval:', Math.round(intervalMs / 1000), 'seconds')
+}
+
+// 停止自动备份
+function stopAutoBackup() {
+  if (autoBackupTimer) {
+    clearInterval(autoBackupTimer)
+    autoBackupTimer = null
+    console.log('[AutoBackup] Stopped')
+  }
+}
+
+// ==================== 备份 IPC Handlers ====================
+
+// 获取数据库路径
+ipcMain.handle('backup:get-db-path', () => {
+  return path.join(app.getPath('userData'), 'data', 'labflow.db')
+})
+
+// 获取备份目录
+ipcMain.handle('backup:get-backup-dir', () => {
+  return getBackupDir()
+})
+
+// 显示保存对话框
+ipcMain.handle('backup:show-save-dialog', async () => {
+  const now = new Date()
+  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const timeStr = now.toTimeString().slice(0, 5).replace(':', '')
+  const defaultName = `LabFlow-备份-${dateStr}-${timeStr}.labflow`
+
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: '导出备份',
+    defaultPath: defaultName,
+    filters: [
+      { name: 'LabFlow 备份', extensions: ['labflow'] },
+      { name: '所有文件', extensions: ['*'] }
+    ]
+  })
+  return result
+})
+
+// 显示打开对话框
+ipcMain.handle('backup:show-open-dialog', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: '导入备份',
+    filters: [
+      { name: 'LabFlow 备份', extensions: ['labflow'] },
+      { name: '所有文件', extensions: ['*'] }
+    ],
+    properties: ['openFile']
+  })
+  return result
+})
+
+// 导出备份
+ipcMain.handle('backup:export', async (_, localStorageData: Record<string, string | null>) => {
+  try {
+    // 显示保存对话框
+    const now = new Date()
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
+    const timeStr = now.toTimeString().slice(0, 5).replace(':', '')
+    const defaultName = `LabFlow-备份-${dateStr}-${timeStr}.labflow`
+
+    const dialogResult = await dialog.showSaveDialog(mainWindow!, {
+      title: '导出备份',
+      defaultPath: defaultName,
+      filters: [
+        { name: 'LabFlow 备份', extensions: ['labflow'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    })
+
+    if (dialogResult.canceled || !dialogResult.filePath) {
+      return { success: false, canceled: true }
+    }
+
+    // 读取数据库文件
+    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    if (!fs.existsSync(dbPath)) {
+      return { success: false, error: '数据库文件不存在' }
+    }
+    const dbBuffer = fs.readFileSync(dbPath)
+    const dbBase64 = dbBuffer.toString('base64')
+
+    // 构建备份数据
+    const backupData = {
+      version: BACKUP_VERSION,
+      timestamp: now.toISOString(),
+      appVersion: app.getVersion(),
+      db: dbBase64,
+      localStorage: localStorageData
+    }
+
+    // 写入文件
+    fs.writeFileSync(dialogResult.filePath, JSON.stringify(backupData), 'utf-8')
+
+    return { success: true, filePath: dialogResult.filePath }
+  } catch (error) {
+    console.error('[Backup] Export failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 导入备份
+ipcMain.handle('backup:import', async () => {
+  try {
+    // 显示打开对话框
+    const dialogResult = await dialog.showOpenDialog(mainWindow!, {
+      title: '导入备份',
+      filters: [
+        { name: 'LabFlow 备份', extensions: ['labflow'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+
+    if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
+      return { success: false, canceled: true }
+    }
+
+    const filePath = dialogResult.filePaths[0]
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const backupData = JSON.parse(content)
+
+    // 兼容 v1.x 格式（纯 JSON localStorage 数据）
+    if (backupData.version && backupData.version.startsWith('1.')) {
+      if (!backupData.data) {
+        return { success: false, error: '无效的备份文件格式' }
+      }
+      // v1.x 格式没有 db 字段，只恢复 localStorage
+      return {
+        success: true,
+        legacy: true,
+        localStorage: backupData.data,
+        version: backupData.version
+      }
+    }
+
+    // v2.x 格式（包含数据库）
+    if (!backupData.db) {
+      return { success: false, error: '无效的备份文件格式：缺少数据库数据' }
+    }
+
+    // 恢复数据库
+    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbDir = path.dirname(dbPath)
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+    }
+
+    const dbBuffer = Buffer.from(backupData.db, 'base64')
+    fs.writeFileSync(dbPath, dbBuffer)
+
+    // 重新加载数据库
+    if (db) {
+      db.close()
+    }
+    const fileBuffer = fs.readFileSync(dbPath)
+    db = new SQL.Database(fileBuffer)
+
+    return {
+      success: true,
+      localStorage: backupData.localStorage || {},
+      version: backupData.version
+    }
+  } catch (error) {
+    console.error('[Backup] Import failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 创建快照
+ipcMain.handle('backup:create-snapshot', async (_, localStorageData: Record<string, string | null>) => {
+  const snapshot = await performSnapshot(localStorageData)
+  return snapshot ? { success: true, snapshot } : { success: false, error: '快照创建失败' }
+})
+
+// 列出快照
+ipcMain.handle('backup:list-snapshots', async () => {
+  const manifest = readManifest()
+  return manifest.snapshots
+})
+
+// 恢复快照
+ipcMain.handle('backup:restore-snapshot', async (_, snapshotId: string) => {
+  try {
+    const manifest = readManifest()
+    const snapshot = manifest.snapshots.find(s => s.id === snapshotId)
+    if (!snapshot) {
+      return { success: false, error: '快照不存在' }
+    }
+
+    const backupDir = getBackupDir()
+    const snapshotPath = path.join(backupDir, snapshot.filename)
+    if (!fs.existsSync(snapshotPath)) {
+      return { success: false, error: '快照文件不存在' }
+    }
+
+    // 恢复数据库
+    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    fs.copyFileSync(snapshotPath, dbPath)
+
+    // 重新加载数据库
+    if (db) {
+      db.close()
+    }
+    const fileBuffer = fs.readFileSync(dbPath)
+    db = new SQL.Database(fileBuffer)
+
+    return { success: true, localStorage: snapshot.localStorage }
+  } catch (error) {
+    console.error('[Backup] Restore failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 删除快照
+ipcMain.handle('backup:delete-snapshot', async (_, snapshotId: string) => {
+  try {
+    const manifest = readManifest()
+    const index = manifest.snapshots.findIndex(s => s.id === snapshotId)
+    if (index === -1) {
+      return { success: false, error: '快照不存在' }
+    }
+
+    const snapshot = manifest.snapshots[index]
+    const backupDir = getBackupDir()
+    const snapshotPath = path.join(backupDir, snapshot.filename)
+    if (fs.existsSync(snapshotPath)) {
+      fs.unlinkSync(snapshotPath)
+    }
+
+    manifest.snapshots.splice(index, 1)
+    writeManifest(manifest)
+
+    return { success: true }
+  } catch (error) {
+    console.error('[Backup] Delete failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 在资源管理器中打开备份目录
+ipcMain.handle('backup:open-folder', async () => {
+  const dir = getBackupDir()
+  shell.openPath(dir)
+})
+
+// 启动自动备份
+ipcMain.handle('backup:start-auto-backup', async (_, intervalMinutes: number, localStorageData: Record<string, string | null>) => {
+  startAutoBackup(intervalMinutes * 60 * 1000, localStorageData)
+  return { success: true }
+})
+
+// 停止自动备份
+ipcMain.handle('backup:stop-auto-backup', async () => {
+  stopAutoBackup()
+  return { success: true }
 })

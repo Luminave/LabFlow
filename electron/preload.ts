@@ -4,21 +4,44 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('electronAPI', {
   // 应用路径
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
-  
+
   // 试管操作
   getTubes: () => ipcRenderer.invoke('db:getTubes'),
   getTube: (id: string) => ipcRenderer.invoke('db:getTube', id),
   addTube: (tube: any) => ipcRenderer.invoke('db:addTube', tube),
   updateTube: (tube: any) => ipcRenderer.invoke('db:updateTube', tube),
   deleteTube: (id: string) => ipcRenderer.invoke('db:deleteTube', id),
-  
+
   // 实验操作
   getExperiments: () => ipcRenderer.invoke('db:getExperiments'),
   getExperiment: (id: string) => ipcRenderer.invoke('db:getExperiment', id),
   saveExperiment: (exp: any) => ipcRenderer.invoke('db:saveExperiment', exp),
   deleteExperiment: (id: string) => ipcRenderer.invoke('db:deleteExperiment', id),
-  
+
   // 试管使用记录
   getTubeUsage: (tubeId: string) => ipcRenderer.invoke('db:getTubeUsage', tubeId),
   addTubeUsage: (record: any) => ipcRenderer.invoke('db:addTubeUsage', record),
+
+  // 清除所有数据库数据
+  clearAllData: () => ipcRenderer.invoke('db:clearAllData'),
+
+  // 备份操作
+  backup: {
+    getDbPath: () => ipcRenderer.invoke('backup:get-db-path'),
+    getBackupDir: () => ipcRenderer.invoke('backup:get-backup-dir'),
+    export: (localStorageData: Record<string, string | null>) =>
+      ipcRenderer.invoke('backup:export', localStorageData),
+    import: () => ipcRenderer.invoke('backup:import'),
+    createSnapshot: (localStorageData: Record<string, string | null>) =>
+      ipcRenderer.invoke('backup:create-snapshot', localStorageData),
+    listSnapshots: () => ipcRenderer.invoke('backup:list-snapshots'),
+    restoreSnapshot: (snapshotId: string) =>
+      ipcRenderer.invoke('backup:restore-snapshot', snapshotId),
+    deleteSnapshot: (snapshotId: string) =>
+      ipcRenderer.invoke('backup:delete-snapshot', snapshotId),
+    openFolder: () => ipcRenderer.invoke('backup:open-folder'),
+    startAutoBackup: (intervalMinutes: number, localStorageData: Record<string, string | null>) =>
+      ipcRenderer.invoke('backup:start-auto-backup', intervalMinutes, localStorageData),
+    stopAutoBackup: () => ipcRenderer.invoke('backup:stop-auto-backup'),
+  },
 })
