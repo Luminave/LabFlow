@@ -45,6 +45,7 @@
   "build": {
     "appId": "com.labflow.app",
     "productName": "LabFlow",
+    "electronDist": "release/electron",
     "directories": {
       "output": "release"
     },
