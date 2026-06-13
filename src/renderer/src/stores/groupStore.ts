@@ -1,6 +1,6 @@
 /**
  * 试管分组状态管理
- * 使用 localStorage 存储
+ * 使用 SQLite 存储
  */
 
 import { create } from 'zustand'
@@ -9,16 +9,14 @@ import { TubeGroup } from '@shared/types'
 interface GroupState {
   groups: TubeGroup[]
   loading: boolean
-  
-  loadGroups: () => void
-  addGroup: (name: string, color?: string, notes?: string) => TubeGroup
-  updateGroup: (id: string, updates: Partial<TubeGroup>) => void
-  deleteGroup: (id: string) => void
+
+  loadGroups: () => Promise<void>
+  addGroup: (name: string, color?: string, notes?: string) => Promise<TubeGroup>
+  updateGroup: (id: string, updates: Partial<TubeGroup>) => Promise<void>
+  deleteGroup: (id: string) => Promise<void>
   getGroup: (id: string) => TubeGroup | undefined
   generateGroupName: () => string
 }
-
-const GROUPS_KEY = 'labflow_groups'
 
 // 醒目的分组预设颜色
 export const GROUP_PRESET_COLORS = [
@@ -44,18 +42,25 @@ function getRandomGroupColor(): string {
 export const useGroupStore = create<GroupState>((set, get) => ({
   groups: [],
   loading: false,
-  
-  loadGroups: () => {
+
+  loadGroups: async () => {
     try {
-      const data = localStorage.getItem(GROUPS_KEY)
-      const groups = data ? JSON.parse(data) : []
-      set({ groups })
+      if (window.electronAPI) {
+        // 从 SQLite 加载
+        const groups = await window.electronAPI.getGroups()
+        set({ groups })
+      } else {
+        // 降级到 localStorage
+        const data = localStorage.getItem('labflow_groups')
+        const groups = data ? JSON.parse(data) : []
+        set({ groups })
+      }
     } catch (e) {
       console.error('Failed to load groups:', e)
     }
   },
-  
-  addGroup: (name, color, notes = '') => {
+
+  addGroup: async (name, color, notes = '') => {
     const finalColor = color || getRandomGroupColor()
     const newGroup: TubeGroup = {
       id: crypto.randomUUID(),
@@ -64,46 +69,77 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       notes,
       createdAt: new Date().toISOString()
     }
-    
-    const newGroups = [...get().groups, newGroup]
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(newGroups))
-    set({ groups: newGroups })
-    
+
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.saveGroup(newGroup)
+      } else {
+        const groups = [...get().groups, newGroup]
+        localStorage.setItem('labflow_groups', JSON.stringify(groups))
+      }
+    } catch (e) {
+      console.error('Failed to save group:', e)
+    }
+
+    set({ groups: [...get().groups, newGroup] })
     return newGroup
   },
-  
-  updateGroup: (id, updates) => {
-    const newGroups = get().groups.map(g => 
+
+  updateGroup: async (id, updates) => {
+    const newGroups = get().groups.map(g =>
       g.id === id ? { ...g, ...updates } : g
     )
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(newGroups))
+
+    try {
+      const updatedGroup = newGroups.find(g => g.id === id)
+      if (updatedGroup) {
+        if (window.electronAPI) {
+          await window.electronAPI.saveGroup(updatedGroup)
+        } else {
+          localStorage.setItem('labflow_groups', JSON.stringify(newGroups))
+        }
+      }
+    } catch (e) {
+      console.error('Failed to update group:', e)
+    }
+
     set({ groups: newGroups })
   },
-  
-  deleteGroup: (id) => {
+
+  deleteGroup: async (id) => {
     const newGroups = get().groups.filter(g => g.id !== id)
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(newGroups))
+
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.deleteGroup(id)
+      } else {
+        localStorage.setItem('labflow_groups', JSON.stringify(newGroups))
+      }
+    } catch (e) {
+      console.error('Failed to delete group:', e)
+    }
+
     set({ groups: newGroups })
   },
-  
+
   getGroup: (id) => {
     return get().groups.find(g => g.id === id)
   },
-  
+
   generateGroupName: () => {
     const now = new Date()
     const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '') // yymmdd
-    
+
     // 检查是否已有同名分组
     const groups = get().groups
     let groupName = dateStr
     let counter = 1
-    
+
     while (groups.some(g => g.name === groupName)) {
       counter++
       groupName = `${dateStr}-${counter}`
     }
-    
+
     return groupName
   }
 }))

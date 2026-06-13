@@ -154,6 +154,64 @@ function createTables() {
       details TEXT
     )
   `)
+
+  // 试管历史记录主表
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tube_histories (
+      tube_id TEXT PRIMARY KEY,
+      tube_name TEXT NOT NULL,
+      tube_type TEXT NOT NULL,
+      current_volume REAL,
+      current_volume_unit TEXT,
+      current_substances TEXT DEFAULT '[]'
+    )
+  `)
+
+  // 试管历史记录子表
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tube_history_records (
+      id TEXT PRIMARY KEY,
+      tube_id TEXT NOT NULL,
+      experiment_id TEXT,
+      experiment_name TEXT,
+      action TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      volume_before REAL,
+      volume_after REAL,
+      volume_unit TEXT,
+      substances_before TEXT DEFAULT '[]',
+      substances_after TEXT DEFAULT '[]',
+      transfer_from TEXT,
+      transfer_to TEXT,
+      transfer_volume REAL,
+      FOREIGN KEY (tube_id) REFERENCES tube_histories(tube_id) ON DELETE CASCADE
+    )
+  `)
+
+  // 试管分组表
+  db.run(`
+    CREATE TABLE IF NOT EXISTS groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      notes TEXT DEFAULT '',
+      hidden INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    )
+  `)
+
+  // 物质颜色配置表
+  db.run(`
+    CREATE TABLE IF NOT EXISTS substance_colors (
+      name TEXT PRIMARY KEY,
+      color TEXT NOT NULL,
+      bg_color TEXT NOT NULL
+    )
+  `)
+
+  // 创建索引
+  db.run(`CREATE INDEX IF NOT EXISTS idx_history_records_tube_id ON tube_history_records(tube_id)`)
+  db.run(`CREATE INDEX IF NOT EXISTS idx_history_records_experiment_id ON tube_history_records(experiment_id)`)
 }
 
 function queryAll(sql: string, params: any[] = []): any[] {
@@ -346,13 +404,238 @@ ipcMain.handle('db:addTubeUsage', async (_, record: any) => {
 ipcMain.handle('db:clearAllData', async () => {
   try {
     await ensureDb()
+    db.run('DELETE FROM tube_history_records')
+    db.run('DELETE FROM tube_histories')
     db.run('DELETE FROM tube_usage_records')
     db.run('DELETE FROM experiments')
     db.run('DELETE FROM tubes')
+    db.run('DELETE FROM groups')
+    db.run('DELETE FROM substance_colors')
     saveDatabase()
     return { success: true }
   } catch (error) {
     console.error('Failed to clear database:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ==================== 试管历史记录操作 ====================
+
+ipcMain.handle('db:getTubeHistories', async () => {
+  await ensureDb()
+  const histories = queryAll('SELECT * FROM tube_histories')
+  const records = queryAll('SELECT * FROM tube_history_records ORDER BY timestamp ASC')
+
+  // 组装数据：将 records 按 tube_id 分组
+  const recordsByTubeId = new Map<string, any[]>()
+  for (const record of records) {
+    const tubeId = record.tube_id
+    if (!recordsByTubeId.has(tubeId)) {
+      recordsByTubeId.set(tubeId, [])
+    }
+    recordsByTubeId.get(tubeId)!.push(record)
+  }
+
+  return histories.map(h => ({
+    tubeId: h.tube_id,
+    tubeName: h.tube_name,
+    tubeType: h.tube_type,
+    currentVolume: h.current_volume,
+    currentVolumeUnit: h.current_volume_unit,
+    currentSubstances: JSON.parse(h.current_substances || '[]'),
+    records: (recordsByTubeId.get(h.tube_id) || []).map(r => ({
+      id: r.id,
+      tubeId: r.tube_id,
+      experimentId: r.experiment_id,
+      experimentName: r.experiment_name,
+      action: r.action,
+      timestamp: r.timestamp,
+      volumeBefore: r.volume_before,
+      volumeAfter: r.volume_after,
+      volumeUnit: r.volume_unit,
+      substancesBefore: JSON.parse(r.substances_before || '[]'),
+      substancesAfter: JSON.parse(r.substances_after || '[]'),
+      transferFrom: r.transfer_from,
+      transferTo: r.transfer_to,
+      transferVolume: r.transfer_volume
+    }))
+  }))
+})
+
+ipcMain.handle('db:saveTubeHistory', async (_, history: any) => {
+  await ensureDb()
+  try {
+    // 保存主记录
+    db.run(
+      `INSERT OR REPLACE INTO tube_histories (tube_id, tube_name, tube_type, current_volume, current_volume_unit, current_substances) VALUES (?, ?, ?, ?, ?, ?)`,
+      [history.tubeId, history.tubeName, history.tubeType, history.currentVolume, history.currentVolumeUnit, JSON.stringify(history.currentSubstances)]
+    )
+
+    // 删除旧的 records
+    db.run('DELETE FROM tube_history_records WHERE tube_id = ?', [history.tubeId])
+
+    // 插入新的 records
+    for (const record of history.records) {
+      db.run(
+        `INSERT INTO tube_history_records (id, tube_id, experiment_id, experiment_name, action, timestamp, volume_before, volume_after, volume_unit, substances_before, substances_after, transfer_from, transfer_to, transfer_volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [record.id, history.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, JSON.stringify(record.substancesBefore), JSON.stringify(record.substancesAfter), record.transferFrom, record.transferTo, record.transferVolume]
+      )
+    }
+
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveTubeHistory] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('db:deleteTubeHistory', async (_, tubeId: string) => {
+  await ensureDb()
+  try {
+    db.run('DELETE FROM tube_history_records WHERE tube_id = ?', [tubeId])
+    db.run('DELETE FROM tube_histories WHERE tube_id = ?', [tubeId])
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:deleteTubeHistory] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 批量保存历史记录（用于完整同步）
+ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
+  await ensureDb()
+  try {
+    // 清空旧数据
+    db.run('DELETE FROM tube_history_records')
+    db.run('DELETE FROM tube_histories')
+
+    // 批量插入
+    for (const history of histories) {
+      db.run(
+        `INSERT INTO tube_histories (tube_id, tube_name, tube_type, current_volume, current_volume_unit, current_substances) VALUES (?, ?, ?, ?, ?, ?)`,
+        [history.tubeId, history.tubeName, history.tubeType, history.currentVolume, history.currentVolumeUnit, JSON.stringify(history.currentSubstances)]
+      )
+
+      for (const record of history.records) {
+        db.run(
+          `INSERT INTO tube_history_records (id, tube_id, experiment_id, experiment_name, action, timestamp, volume_before, volume_after, volume_unit, substances_before, substances_after, transfer_from, transfer_to, transfer_volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [record.id, history.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, JSON.stringify(record.substancesBefore), JSON.stringify(record.substancesAfter), record.transferFrom, record.transferTo, record.transferVolume]
+        )
+      }
+    }
+
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveTubeHistories] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ==================== 试管分组操作 ====================
+
+ipcMain.handle('db:getGroups', async () => {
+  await ensureDb()
+  return queryAll('SELECT * FROM groups ORDER BY created_at DESC')
+})
+
+ipcMain.handle('db:saveGroup', async (_, group: any) => {
+  await ensureDb()
+  try {
+    db.run(
+      `INSERT OR REPLACE INTO groups (id, name, color, notes, hidden, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [group.id, group.name, group.color, group.notes || '', group.hidden ? 1 : 0, group.createdAt]
+    )
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveGroup] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('db:deleteGroup', async (_, id: string) => {
+  await ensureDb()
+  try {
+    db.run('DELETE FROM groups WHERE id = ?', [id])
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:deleteGroup] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 批量保存分组（用于完整同步）
+ipcMain.handle('db:saveGroups', async (_, groups: any[]) => {
+  await ensureDb()
+  try {
+    db.run('DELETE FROM groups')
+    for (const group of groups) {
+      db.run(
+        `INSERT INTO groups (id, name, color, notes, hidden, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        [group.id, group.name, group.color, group.notes || '', group.hidden ? 1 : 0, group.createdAt]
+      )
+    }
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveGroups] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// ==================== 物质颜色配置操作 ====================
+
+ipcMain.handle('db:getSubstanceColors', async () => {
+  await ensureDb()
+  return queryAll('SELECT * FROM substance_colors')
+})
+
+ipcMain.handle('db:saveSubstanceColor', async (_, color: any) => {
+  await ensureDb()
+  try {
+    db.run(
+      `INSERT OR REPLACE INTO substance_colors (name, color, bg_color) VALUES (?, ?, ?)`,
+      [color.name, color.color, color.bgColor]
+    )
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveSubstanceColor] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('db:deleteSubstanceColor', async (_, name: string) => {
+  await ensureDb()
+  try {
+    db.run('DELETE FROM substance_colors WHERE name = ?', [name])
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:deleteSubstanceColor] Failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 批量保存颜色配置（用于完整同步）
+ipcMain.handle('db:saveSubstanceColors', async (_, colors: any[]) => {
+  await ensureDb()
+  try {
+    db.run('DELETE FROM substance_colors')
+    for (const color of colors) {
+      db.run(
+        `INSERT INTO substance_colors (name, color, bg_color) VALUES (?, ?, ?)`,
+        [color.name, color.color, color.bgColor]
+      )
+    }
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    console.error('[db:saveSubstanceColors] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
 })

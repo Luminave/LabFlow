@@ -45,6 +45,25 @@ interface ElectronAPI {
   deleteExperiment: (id: string) => Promise<{ success: boolean }>
   getTubeUsage: (tubeId: string) => Promise<any[]>
   addTubeUsage: (record: any) => Promise<any>
+
+  // 试管历史记录
+  getTubeHistories: () => Promise<any[]>
+  saveTubeHistory: (history: any) => Promise<{ success: boolean; error?: string }>
+  deleteTubeHistory: (tubeId: string) => Promise<{ success: boolean; error?: string }>
+  saveTubeHistories: (histories: any[]) => Promise<{ success: boolean; error?: string }>
+
+  // 试管分组
+  getGroups: () => Promise<any[]>
+  saveGroup: (group: any) => Promise<{ success: boolean; error?: string }>
+  deleteGroup: (id: string) => Promise<{ success: boolean; error?: string }>
+  saveGroups: (groups: any[]) => Promise<{ success: boolean; error?: string }>
+
+  // 物质颜色配置
+  getSubstanceColors: () => Promise<any[]>
+  saveSubstanceColor: (color: any) => Promise<{ success: boolean; error?: string }>
+  deleteSubstanceColor: (name: string) => Promise<{ success: boolean; error?: string }>
+  saveSubstanceColors: (colors: any[]) => Promise<{ success: boolean; error?: string }>
+
   clearAllData: () => Promise<{ success: boolean; error?: string }>
   backup: BackupAPI
 }

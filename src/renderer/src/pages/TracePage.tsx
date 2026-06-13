@@ -67,26 +67,29 @@ export default function TracePage() {
   }, [fetchTubes, loadColors])
   
   useEffect(() => {
-    const histories = getAllTubeHistories()
-    // 建立仓库试管名称映射（以仓库中的名称为准）
-    const nameMap = new Map(warehouseTubes.map(t => [t.id, t.name]))
-    // 过滤掉缓冲液类型和上样类型的试管
-    const tubeList = Array.from(histories.values()).filter(tube => 
-      tube.tubeType !== 'buffer' && tube.tubeType !== 'sample'
-    ).map(tube => ({
-      ...tube,
-      tubeName: nameMap.get(tube.tubeId) || tube.tubeName
-    }))
-    setTubes(tubeList)
-    
-    // 如果 URL 指定了 tubeId，自动选中
-    const tubeId = searchParams.get('tubeId')
-    if (tubeId) {
-      const tube = tubeList.find(t => t.tubeId === tubeId)
-      if (tube) {
-        setSelectedTube(tube)
+    const loadHistories = async () => {
+      const histories = await getAllTubeHistories()
+      // 建立仓库试管名称映射（以仓库中的名称为准）
+      const nameMap = new Map(warehouseTubes.map(t => [t.id, t.name]))
+      // 过滤掉缓冲液类型和上样类型的试管
+      const tubeList = Array.from(histories.values()).filter(tube =>
+        tube.tubeType !== 'buffer' && tube.tubeType !== 'sample'
+      ).map(tube => ({
+        ...tube,
+        tubeName: nameMap.get(tube.tubeId) || tube.tubeName
+      }))
+      setTubes(tubeList)
+
+      // 如果 URL 指定了 tubeId，自动选中
+      const tubeId = searchParams.get('tubeId')
+      if (tubeId) {
+        const tube = tubeList.find(t => t.tubeId === tubeId)
+        if (tube) {
+          setSelectedTube(tube)
+        }
       }
     }
+    loadHistories()
   }, [searchParams, warehouseTubes])
   
   // 筛选和搜索

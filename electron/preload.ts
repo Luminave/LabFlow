@@ -22,6 +22,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTubeUsage: (tubeId: string) => ipcRenderer.invoke('db:getTubeUsage', tubeId),
   addTubeUsage: (record: any) => ipcRenderer.invoke('db:addTubeUsage', record),
 
+  // 试管历史记录
+  getTubeHistories: () => ipcRenderer.invoke('db:getTubeHistories'),
+  saveTubeHistory: (history: any) => ipcRenderer.invoke('db:saveTubeHistory', history),
+  deleteTubeHistory: (tubeId: string) => ipcRenderer.invoke('db:deleteTubeHistory', tubeId),
+  saveTubeHistories: (histories: any[]) => ipcRenderer.invoke('db:saveTubeHistories', histories),
+
+  // 试管分组
+  getGroups: () => ipcRenderer.invoke('db:getGroups'),
+  saveGroup: (group: any) => ipcRenderer.invoke('db:saveGroup', group),
+  deleteGroup: (id: string) => ipcRenderer.invoke('db:deleteGroup', id),
+  saveGroups: (groups: any[]) => ipcRenderer.invoke('db:saveGroups', groups),
+
+  // 物质颜色配置
+  getSubstanceColors: () => ipcRenderer.invoke('db:getSubstanceColors'),
+  saveSubstanceColor: (color: any) => ipcRenderer.invoke('db:saveSubstanceColor', color),
+  deleteSubstanceColor: (name: string) => ipcRenderer.invoke('db:deleteSubstanceColor', name),
+  saveSubstanceColors: (colors: any[]) => ipcRenderer.invoke('db:saveSubstanceColors', colors),
+
   // 清除所有数据库数据
   clearAllData: () => ipcRenderer.invoke('db:clearAllData'),
 

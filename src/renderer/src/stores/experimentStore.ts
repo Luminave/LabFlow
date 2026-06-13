@@ -249,12 +249,19 @@ function experimentToDb(exp: Experiment): any {
 }
 
 // 历史记录管理
-function loadHistories(): Map<string, TubeHistory> {
+async function loadHistories(): Promise<Map<string, TubeHistory>> {
   try {
-    const data = localStorage.getItem(TUBE_HISTORIES_KEY)
-    if (data) {
-      const arr = JSON.parse(data)
-      return new Map(arr.map((h: TubeHistory) => [h.tubeId, h]))
+    if (window.electronAPI) {
+      // 从 SQLite 加载
+      const histories = await window.electronAPI.getTubeHistories()
+      return new Map(histories.map((h: TubeHistory) => [h.tubeId, h]))
+    } else {
+      // 降级到 localStorage
+      const data = localStorage.getItem(TUBE_HISTORIES_KEY)
+      if (data) {
+        const arr = JSON.parse(data)
+        return new Map(arr.map((h: TubeHistory) => [h.tubeId, h]))
+      }
     }
   } catch (e) {
     console.error('Failed to load histories:', e)
@@ -262,9 +269,16 @@ function loadHistories(): Map<string, TubeHistory> {
   return new Map()
 }
 
-function saveHistories(histories: Map<string, TubeHistory>) {
+async function saveHistories(histories: Map<string, TubeHistory>) {
   try {
-    localStorage.setItem(TUBE_HISTORIES_KEY, JSON.stringify(Array.from(histories.values())))
+    const historiesArray = Array.from(histories.values())
+    if (window.electronAPI) {
+      // 保存到 SQLite
+      await window.electronAPI.saveTubeHistories(historiesArray)
+    } else {
+      // 降级到 localStorage
+      localStorage.setItem(TUBE_HISTORIES_KEY, JSON.stringify(historiesArray))
+    }
   } catch (e) {
     console.error('Failed to save histories:', e)
   }
@@ -824,8 +838,8 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   completeExperiment: async () => {
     const { currentExperiment, currentTubes, connections } = get()
     if (!currentExperiment) return
-    
-    const histories = loadHistories()
+
+    const histories = await loadHistories()
     const initialStateTubes = currentTubes.map(t => ({ ...t }))
     
     // 统计缓冲液消耗（按仓库 ID 分组）
@@ -956,7 +970,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           fromId, undefined, conn.volume)
       }
     }
-    saveHistories(histories)
+    await saveHistories(histories)
     
     // 计算结束状态
     const tubeInVolume = new Map<string, number>()
@@ -1236,7 +1250,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     }
     
     // 清除历史记录
-    const histories = loadHistories()
+    const histories = await loadHistories()
     histories.forEach(history => {
       const expRecords = history.records.filter(r => r.experimentId === experimentId)
       if (expRecords.length === 0) return
@@ -1254,7 +1268,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       }
       history.records = history.records.filter(r => r.experimentId !== experimentId)
     })
-    saveHistories(histories)
+    await saveHistories(histories)
     
     const revertedExperiment = { ...experiment, status: 'reverted' as const, updatedAt: new Date().toISOString() }
     if (window.electronAPI) {
@@ -1423,12 +1437,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   }
 }))
 
-export function getTubeHistory(tubeId: string) {
-  return loadHistories().get(tubeId)
+export async function getTubeHistory(tubeId: string) {
+  const histories = await loadHistories()
+  return histories.get(tubeId)
 }
 
-export function getAllTubeHistories() {
-  const histories = loadHistories()
+export async function getAllTubeHistories() {
+  const histories = await loadHistories()
   
   // 过滤掉无效的历史记录
   const validHistories = new Map<string, TubeHistory>()
