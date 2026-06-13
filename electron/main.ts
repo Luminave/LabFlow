@@ -1,29 +1,32 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import initSqlJs from 'sql.js'
 import fs from 'fs'
+
+// sql.js 是 CJS 模块，需要使用 require 导入
+const initSqlJs = require('sql.js')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let SQL: any = null
 let db: any = null
+let dbInitPromise: Promise<any> | null = null
 
 // 数据库初始化
 async function initDatabase() {
   if (!SQL) {
     SQL = await initSqlJs({})
   }
-  
+
   const userDataPath = app.getPath('userData')
   const dbDir = path.join(userDataPath, 'data')
   const dbPath = path.join(dbDir, 'labflow.db')
-  
+
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true })
   }
-  
+
   if (fs.existsSync(dbPath)) {
     const fileBuffer = fs.readFileSync(dbPath)
     db = new SQL.Database(fileBuffer)
@@ -32,8 +35,35 @@ async function initDatabase() {
     createTables()
     saveDatabase()
   }
-  
+
+  // 每次启动都执行迁移
+  migrateDatabase()
+
   return db
+}
+
+// 数据库迁移
+function migrateDatabase() {
+  // 检查 tubes 表是否有 group_id 列
+  try {
+    const columns = queryAll("PRAGMA table_info(tubes)")
+    const hasGroupId = columns.some((col: any) => col.name === 'group_id')
+    if (!hasGroupId) {
+      db.run('ALTER TABLE tubes ADD COLUMN group_id TEXT')
+      console.log('[Migration] Added group_id column to tubes table')
+      saveDatabase()
+    }
+  } catch (e) {
+    console.error('[Migration] Failed:', e)
+  }
+}
+
+// 确保数据库已初始化（IPC handler 调用前使用）
+async function ensureDb() {
+  if (db) return db
+  if (dbInitPromise) return dbInitPromise
+  dbInitPromise = initDatabase()
+  return dbInitPromise
 }
 
 function saveDatabase() {
@@ -62,10 +92,11 @@ function createTables() {
       storage_location TEXT,
       storage_condition TEXT,
       notes TEXT,
-      tags TEXT
+      tags TEXT,
+      group_id TEXT
     )
   `)
-  
+
   db.run(`
     CREATE TABLE IF NOT EXISTS experiments (
       id TEXT PRIMARY KEY,
@@ -116,8 +147,13 @@ function queryOne(sql: string, params: any[] = []): any | null {
 async function createWindow() {
   try {
     await initDatabase()
+    console.log('Database initialized successfully')
   } catch (e) {
     console.error('Database init failed:', e)
+    // 显示错误对话框，不要静默失败
+    dialog.showErrorBox('数据库初始化失败', `数据库无法启动，应用将退出。\n错误: ${e}`)
+    app.quit()
+    return
   }
 
   mainWindow = new BrowserWindow({
@@ -171,15 +207,18 @@ ipcMain.handle('get-app-path', () => app.getPath('userData'))
 
 // 试管操作
 ipcMain.handle('db:getTubes', async () => {
+  await ensureDb()
   return queryAll('SELECT * FROM tubes WHERE status != ? ORDER BY created_at DESC', ['discarded'])
 })
 
 ipcMain.handle('db:getTube', async (_, id: string) => {
+  await ensureDb()
   return queryOne('SELECT * FROM tubes WHERE id = ?', [id])
 })
 
 ipcMain.handle('db:addTube', async (_, tube: any) => {
   try {
+    await ensureDb()
     console.log('Adding tube:', tube)
     db.run(
       `INSERT INTO tubes (id, name, type, total_volume, total_volume_unit, remaining_volume, remaining_volume_unit, substances, created_at, updated_at, status, storage_location, storage_condition, notes, tags, group_id)
@@ -195,6 +234,7 @@ ipcMain.handle('db:addTube', async (_, tube: any) => {
 })
 
 ipcMain.handle('db:updateTube', async (_, tube: any) => {
+  await ensureDb()
   db.run(
     `UPDATE tubes SET name = ?, total_volume = ?, total_volume_unit = ?, remaining_volume = ?, remaining_volume_unit = ?, substances = ?, updated_at = ?, status = ?, storage_location = ?, storage_condition = ?, notes = ?, tags = ? WHERE id = ?`,
     [tube.name, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.updatedAt, tube.status, tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.id]
@@ -204,6 +244,7 @@ ipcMain.handle('db:updateTube', async (_, tube: any) => {
 })
 
 ipcMain.handle('db:deleteTube', async (_, id: string) => {
+  await ensureDb()
   db.run('UPDATE tubes SET status = ? WHERE id = ?', ['discarded', id])
   saveDatabase()
   return { success: true }
@@ -211,14 +252,17 @@ ipcMain.handle('db:deleteTube', async (_, id: string) => {
 
 // 实验操作
 ipcMain.handle('db:getExperiments', async () => {
+  await ensureDb()
   return queryAll('SELECT * FROM experiments ORDER BY created_at DESC')
 })
 
 ipcMain.handle('db:getExperiment', async (_, id: string) => {
+  await ensureDb()
   return queryOne('SELECT * FROM experiments WHERE id = ?', [id])
 })
 
 ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
+  await ensureDb()
   const existing = queryOne('SELECT id FROM experiments WHERE id = ?', [exp.id])
   
   if (existing) {
@@ -241,6 +285,7 @@ ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
 })
 
 ipcMain.handle('db:deleteExperiment', async (_, id: string) => {
+  await ensureDb()
   db.run('DELETE FROM tube_usage_records WHERE experiment_id = ?', [id])
   db.run('DELETE FROM experiments WHERE id = ?', [id])
   saveDatabase()
@@ -249,10 +294,12 @@ ipcMain.handle('db:deleteExperiment', async (_, id: string) => {
 
 // 试管使用记录
 ipcMain.handle('db:getTubeUsage', async (_, tubeId: string) => {
+  await ensureDb()
   return queryAll('SELECT * FROM tube_usage_records WHERE tube_id = ? ORDER BY timestamp DESC', [tubeId])
 })
 
 ipcMain.handle('db:addTubeUsage', async (_, record: any) => {
+  await ensureDb()
   db.run(
     `INSERT INTO tube_usage_records (id, tube_id, experiment_id, action, volume_change, timestamp, details) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [record.id || crypto.randomUUID(), record.tubeId, record.experimentId, record.action, record.volumeChange || null, record.timestamp, record.details ? JSON.stringify(record.details) : null]
@@ -264,6 +311,7 @@ ipcMain.handle('db:addTubeUsage', async (_, record: any) => {
 // 清除所有数据库数据
 ipcMain.handle('db:clearAllData', async () => {
   try {
+    await ensureDb()
     db.run('DELETE FROM tube_usage_records')
     db.run('DELETE FROM experiments')
     db.run('DELETE FROM tubes')
@@ -339,6 +387,7 @@ function calculateDbStats(): { tubes: number; experiments: number; histories: nu
 // 执行快照创建（主进程内部调用）
 async function performSnapshot(localStorageData?: Record<string, string | null>): Promise<SnapshotInfo | null> {
   try {
+    await ensureDb()
     const backupDir = getBackupDir()
     const now = new Date()
     const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)

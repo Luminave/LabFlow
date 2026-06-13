@@ -52,7 +52,9 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "node_modules/sql.js/dist/sql-wasm.js",
+      "node_modules/sql.js/dist/sql-wasm.wasm"
     ],
     "linux": {
       "target": ["AppImage", "deb"],
