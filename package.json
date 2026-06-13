@@ -69,6 +69,7 @@
       ],
       "signAndEditExecutable": false
     },
+    "afterPack": "./scripts/afterPack.js",
     "mac": {
       "target": [
         {"target": "dmg", "arch": ["x64", "arm64"]},
