@@ -651,7 +651,7 @@ interface SnapshotInfo {
   timestamp: string
   filename: string
   localStorage: Record<string, string | null>
-  stats: { tubes: number; experiments: number; histories: number; groups: number }
+  stats: { tubes: number; experiments: number; histories: number; groups: number; tubeHistories: number; substanceColors: number }
 }
 
 interface Manifest {
@@ -687,7 +687,7 @@ function writeManifest(manifest: Manifest) {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
 }
 
-function calculateDbStats(): { tubes: number; experiments: number; histories: number; groups: number } {
+function calculateDbStats(): { tubes: number; experiments: number; histories: number; groups: number; tubeHistories: number; substanceColors: number } {
   try {
     const tubes = queryAll('SELECT COUNT(*) as count FROM tubes').length > 0
       ? queryAll('SELECT COUNT(*) as count FROM tubes')[0].count : 0
@@ -695,9 +695,15 @@ function calculateDbStats(): { tubes: number; experiments: number; histories: nu
       ? queryAll('SELECT COUNT(*) as count FROM experiments')[0].count : 0
     const histories = queryAll('SELECT COUNT(*) as count FROM tube_usage_records').length > 0
       ? queryAll('SELECT COUNT(*) as count FROM tube_usage_records')[0].count : 0
-    return { tubes, experiments, histories, groups: 0 }
+    const groups = queryAll('SELECT COUNT(*) as count FROM groups').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM groups')[0].count : 0
+    const tubeHistories = queryAll('SELECT COUNT(*) as count FROM tube_histories').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM tube_histories')[0].count : 0
+    const substanceColors = queryAll('SELECT COUNT(*) as count FROM substance_colors').length > 0
+      ? queryAll('SELECT COUNT(*) as count FROM substance_colors')[0].count : 0
+    return { tubes, experiments, histories, groups, tubeHistories, substanceColors }
   } catch {
-    return { tubes: 0, experiments: 0, histories: 0, groups: 0 }
+    return { tubes: 0, experiments: 0, histories: 0, groups: 0, tubeHistories: 0, substanceColors: 0 }
   }
 }
 
@@ -719,14 +725,8 @@ async function performSnapshot(localStorageData?: Record<string, string | null>)
     }
     fs.copyFileSync(dbPath, path.join(backupDir, filename))
 
-    // 统计信息（包含 groups 从 localStorage）
+    // 统计信息（现在全部从 SQLite 获取）
     const stats = calculateDbStats()
-    if (localStorageData?.labflow_groups) {
-      try {
-        const groups = JSON.parse(localStorageData.labflow_groups)
-        stats.groups = Array.isArray(groups) ? groups.length : 0
-      } catch { /* ignore */ }
-    }
 
     const snapshot: SnapshotInfo = {
       id: snapshotId,

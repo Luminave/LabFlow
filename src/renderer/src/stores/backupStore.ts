@@ -43,9 +43,14 @@ interface BackupState {
 
 const SETTINGS_KEY = 'labflow_backup_settings'
 
-// 收集前端 localStorage 数据（分组、颜色配置等纯前端数据）
+// 收集前端 localStorage 数据（主题、字号等纯前端设置）
+// 注意：groups 和 substance_colors 已迁移到 SQLite，不再需要从 localStorage 收集
 function collectLocalStorageData(): Record<string, string | null> {
   return {
+    labflow_theme: localStorage.getItem('labflow_theme'),
+    labflow_font_size: localStorage.getItem('labflow_font_size'),
+    labflow_backup_settings: localStorage.getItem('labflow_backup_settings'),
+    // 保留这些字段以兼容旧版备份格式
     labflow_groups: localStorage.getItem('labflow_groups'),
     labflow_substance_colors: localStorage.getItem('labflow_substance_colors'),
   }
@@ -152,15 +157,41 @@ export const useBackupStore = create<BackupState>((set, get) => ({
       if (result.canceled) return { success: false }
 
       if (result.success) {
-        // 恢复 localStorage 数据
+        // 恢复 localStorage 数据（主题、字号等前端设置）
         if (result.localStorage) {
-          // 恢复分组数据
-          if (result.localStorage.labflow_groups) {
-            localStorage.setItem('labflow_groups', result.localStorage.labflow_groups)
+          // 恢复主题设置
+          if (result.localStorage.labflow_theme) {
+            localStorage.setItem('labflow_theme', result.localStorage.labflow_theme)
           }
-          // 恢复颜色配置
+          // 恢复字号设置
+          if (result.localStorage.labflow_font_size) {
+            localStorage.setItem('labflow_font_size', result.localStorage.labflow_font_size)
+          }
+          // 恢复备份设置
+          if (result.localStorage.labflow_backup_settings) {
+            localStorage.setItem('labflow_backup_settings', result.localStorage.labflow_backup_settings)
+          }
+
+          // 兼容旧版备份：如果包含 groups 或 substance_colors，迁移到 SQLite
+          if (result.localStorage.labflow_groups) {
+            try {
+              const groups = JSON.parse(result.localStorage.labflow_groups)
+              if (Array.isArray(groups) && groups.length > 0) {
+                await window.electronAPI!.saveGroups(groups)
+              }
+            } catch (e) {
+              console.error('Failed to restore groups from backup:', e)
+            }
+          }
           if (result.localStorage.labflow_substance_colors) {
-            localStorage.setItem('labflow_substance_colors', result.localStorage.labflow_substance_colors)
+            try {
+              const colors = JSON.parse(result.localStorage.labflow_substance_colors)
+              if (Array.isArray(colors) && colors.length > 0) {
+                await window.electronAPI!.saveSubstanceColors(colors)
+              }
+            } catch (e) {
+              console.error('Failed to restore substance colors from backup:', e)
+            }
           }
         }
 
@@ -214,13 +245,41 @@ export const useBackupStore = create<BackupState>((set, get) => ({
       const result = await window.electronAPI!.backup.restoreSnapshot(id)
 
       if (result.success) {
-        // 恢复 localStorage 数据
+        // 恢复 localStorage 数据（主题、字号等前端设置）
         if (result.localStorage) {
+          // 恢复主题设置
+          if (result.localStorage.labflow_theme) {
+            localStorage.setItem('labflow_theme', result.localStorage.labflow_theme)
+          }
+          // 恢复字号设置
+          if (result.localStorage.labflow_font_size) {
+            localStorage.setItem('labflow_font_size', result.localStorage.labflow_font_size)
+          }
+          // 恢复备份设置
+          if (result.localStorage.labflow_backup_settings) {
+            localStorage.setItem('labflow_backup_settings', result.localStorage.labflow_backup_settings)
+          }
+
+          // 兼容旧版快照：如果包含 groups 或 substance_colors，迁移到 SQLite
           if (result.localStorage.labflow_groups) {
-            localStorage.setItem('labflow_groups', result.localStorage.labflow_groups)
+            try {
+              const groups = JSON.parse(result.localStorage.labflow_groups)
+              if (Array.isArray(groups) && groups.length > 0) {
+                await window.electronAPI!.saveGroups(groups)
+              }
+            } catch (e) {
+              console.error('Failed to restore groups from snapshot:', e)
+            }
           }
           if (result.localStorage.labflow_substance_colors) {
-            localStorage.setItem('labflow_substance_colors', result.localStorage.labflow_substance_colors)
+            try {
+              const colors = JSON.parse(result.localStorage.labflow_substance_colors)
+              if (Array.isArray(colors) && colors.length > 0) {
+                await window.electronAPI!.saveSubstanceColors(colors)
+              }
+            } catch (e) {
+              console.error('Failed to restore substance colors from snapshot:', e)
+            }
           }
         }
         return true
