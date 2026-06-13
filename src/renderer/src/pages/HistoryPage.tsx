@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useExperimentStore } from '../stores/experimentStore'
 import { useWarehouseStore } from '../stores/warehouseStore'
@@ -8,10 +8,15 @@ import styles from './HistoryPage.module.css'
 
 export default function HistoryPage() {
   const navigate = useNavigate()
-  const { experiments, revertExperiment, deleteExperiment, loadExperiment } = useExperimentStore()
+  const { experiments, revertExperiment, deleteExperiment, loadExperiment, fetchExperiments } = useExperimentStore()
   const { fetchTubes } = useWarehouseStore()
   const { language } = useI18nStore()
   const [selectedExperiment, setSelectedExperiment] = useState<string | null>(null)
+
+  // 加载实验记录（防止刷新页面后 experiments 为空）
+  useEffect(() => {
+    fetchExperiments()
+  }, [fetchExperiments])
   
   const statusLabels: Record<string, string> = {
     draft: t('status.draft', language),
@@ -60,8 +65,12 @@ export default function HistoryPage() {
   }
   
   const handleOpen = (id: string) => {
-    loadExperiment(id)
-    navigate('/') // 跳转到实验模拟页面
+    const success = loadExperiment(id)
+    if (success) {
+      navigate('/') // 跳转到实验模拟页面
+    } else {
+      alert(language === 'zh' ? '找不到该实验，可能未保存成功' : 'Experiment not found, it may not have been saved')
+    }
   }
   
   const selected = experiments.find(e => e.id === selectedExperiment)

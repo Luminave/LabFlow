@@ -556,6 +556,9 @@ ipcMain.handle('db:deleteTubeHistory', async (_, tubeId: string) => {
 ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
   await ensureDb()
   try {
+    // 使用事务保护：DELETE + INSERT 原子执行，中途失败自动回滚
+    db.run('BEGIN TRANSACTION')
+
     // 清空旧数据
     db.run('DELETE FROM tube_history_records')
     db.run('DELETE FROM tube_histories')
@@ -575,9 +578,12 @@ ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
       }
     }
 
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    // 回滚事务，恢复旧数据
+    try { db.run('ROLLBACK') } catch { /* ignore rollback error */ }
     console.error('[db:saveTubeHistories] Failed:', error)
     return { success: false, error: (error as Error).message }
   }

@@ -180,7 +180,7 @@ interface ExperimentState {
   createNewExperiment: (name: string, description?: string) => void
   saveCurrentExperiment: (name?: string) => Promise<boolean | void>
   saveAsExperiment: (newName: string) => void
-  loadExperiment: (id: string) => void
+  loadExperiment: (id: string) => boolean
   deleteExperiment: (id: string) => void
   
   addSourceTube: (tube: Tube) => void
@@ -270,17 +270,16 @@ async function loadHistories(): Promise<Map<string, TubeHistory>> {
 }
 
 async function saveHistories(histories: Map<string, TubeHistory>) {
-  try {
-    const historiesArray = Array.from(histories.values())
-    if (window.electronAPI) {
-      // 保存到 SQLite
-      await window.electronAPI.saveTubeHistories(historiesArray)
-    } else {
-      // 降级到 localStorage
-      localStorage.setItem(TUBE_HISTORIES_KEY, JSON.stringify(historiesArray))
+  const historiesArray = Array.from(histories.values())
+  if (window.electronAPI) {
+    // 保存到 SQLite
+    const result = await window.electronAPI.saveTubeHistories(historiesArray)
+    if (!result || !result.success) {
+      throw new Error(result?.error || '保存试管历史到数据库失败')
     }
-  } catch (e) {
-    console.error('Failed to save histories:', e)
+  } else {
+    // 降级到 localStorage
+    localStorage.setItem(TUBE_HISTORIES_KEY, JSON.stringify(historiesArray))
   }
 }
 
@@ -615,26 +614,27 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   loadExperiment: (id) => {
     const experiment = get().experiments.find(e => e.id === id)
     if (!experiment) {
-      alert('找不到该实验')
-      return
+      console.warn('[loadExperiment] Experiment not found:', id)
+      return false
     }
-    
-    const displayTubes = experiment.initialStateTubes || experiment.tubes
-    
+
+    const displayTubes = experiment.initialStateTubes || experiment.tubes || []
+
     set({
       currentExperiment: experiment,
       currentTubes: displayTubes,
-      connections: experiment.connections,
+      connections: experiment.connections || [],
       tubePositions: experiment.tubePositions || [],
       showEndState: false
     })
-    
+
     saveCurrentExperimentToStorage({
       currentExperiment: experiment,
       currentTubes: displayTubes,
-      connections: experiment.connections,
+      connections: experiment.connections || [],
       tubePositions: experiment.tubePositions || []
     })
+    return true
   },
   
   deleteExperiment: async (id) => {
@@ -970,8 +970,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           fromId, undefined, conn.volume)
       }
     }
-    await saveHistories(histories)
-    
+    try {
+      await saveHistories(histories)
+    } catch (e) {
+      console.error('[completeExperiment] Failed to save tube histories:', e)
+      alert('⚠️ 试管历史记录保存失败：' + (e as Error).message + '\n\n实验数据已保存，但溯源页面可能无法显示试管记录。')
+    }
+
     // 计算结束状态
     const tubeInVolume = new Map<string, number>()
     const tubeOutVolume = new Map<string, number>()
