@@ -44,15 +44,24 @@ async function initDatabase() {
 
 // 数据库迁移
 function migrateDatabase() {
-  // 检查 tubes 表是否有 group_id 列
   try {
-    const columns = queryAll("PRAGMA table_info(tubes)")
-    const hasGroupId = columns.some((col: any) => col.name === 'group_id')
+    // 检查 tubes 表是否有 group_id 列
+    const tubesColumns = queryAll("PRAGMA table_info(tubes)")
+    const hasGroupId = tubesColumns.some((col: any) => col.name === 'group_id')
     if (!hasGroupId) {
       db.run('ALTER TABLE tubes ADD COLUMN group_id TEXT')
       console.log('[Migration] Added group_id column to tubes table')
-      saveDatabase()
     }
+
+    // 检查 experiments 表是否有 is_waste 列
+    const expColumns = queryAll("PRAGMA table_info(experiments)")
+    const hasIsWaste = expColumns.some((col: any) => col.name === 'is_waste')
+    if (!hasIsWaste) {
+      db.run('ALTER TABLE experiments ADD COLUMN is_waste INTEGER DEFAULT 0')
+      console.log('[Migration] Added is_waste column to experiments table')
+    }
+
+    saveDatabase()
   } catch (e) {
     console.error('[Migration] Failed:', e)
   }
@@ -61,9 +70,27 @@ function migrateDatabase() {
 // 确保数据库已初始化（IPC handler 调用前使用）
 async function ensureDb() {
   if (db) return db
-  if (dbInitPromise) return dbInitPromise
+
+  // 如果有正在进行的初始化，等待它完成
+  if (dbInitPromise) {
+    try {
+      return await dbInitPromise
+    } catch (e) {
+      // 初始化失败，清除 promise 以便重试
+      dbInitPromise = null
+      throw e
+    }
+  }
+
+  // 开始新的初始化
   dbInitPromise = initDatabase()
-  return dbInitPromise
+  try {
+    return await dbInitPromise
+  } catch (e) {
+    // 初始化失败，清除 promise 以便重试
+    dbInitPromise = null
+    throw e
+  }
 }
 
 function saveDatabase() {
@@ -111,7 +138,8 @@ function createTables() {
       connections TEXT NOT NULL,
       warehouse_snapshot TEXT,
       initial_state_tubes TEXT,
-      end_state_tubes TEXT
+      end_state_tubes TEXT,
+      is_waste INTEGER DEFAULT 0
     )
   `)
   
@@ -129,6 +157,10 @@ function createTables() {
 }
 
 function queryAll(sql: string, params: any[] = []): any[] {
+  if (!db) {
+    console.error('[queryAll] Database not initialized')
+    return []
+  }
   const stmt = db.prepare(sql)
   stmt.bind(params)
   const results: any[] = []
@@ -264,20 +296,22 @@ ipcMain.handle('db:getExperiment', async (_, id: string) => {
 ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
   await ensureDb()
   const existing = queryOne('SELECT id FROM experiments WHERE id = ?', [exp.id])
-  
+
   if (existing) {
     db.run(
-      `UPDATE experiments SET name = ?, description = ?, updated_at = ?, completed_at = ?, status = ?, tubes = ?, tube_positions = ?, connections = ?, warehouse_snapshot = ?, initial_state_tubes = ?, end_state_tubes = ? WHERE id = ?`,
-      [exp.name, exp.description || null, exp.updated_at, exp.completed_at || null, exp.status, 
-       JSON.stringify(exp.tubes), JSON.stringify(exp.tube_positions || []), JSON.stringify(exp.connections), 
-       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null, exp.id]
+      `UPDATE experiments SET name = ?, description = ?, updated_at = ?, completed_at = ?, status = ?, tubes = ?, tube_positions = ?, connections = ?, warehouse_snapshot = ?, initial_state_tubes = ?, end_state_tubes = ?, is_waste = ? WHERE id = ?`,
+      [exp.name, exp.description || null, exp.updated_at, exp.completed_at || null, exp.status,
+       JSON.stringify(exp.tubes), JSON.stringify(exp.tube_positions || []), JSON.stringify(exp.connections),
+       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null,
+       exp.is_waste ? 1 : 0, exp.id]
     )
   } else {
     db.run(
-      `INSERT INTO experiments (id, name, description, created_at, updated_at, completed_at, status, tubes, tube_positions, connections, warehouse_snapshot, initial_state_tubes, end_state_tubes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [exp.id, exp.name, exp.description || null, exp.created_at, exp.updated_at, exp.completed_at || null, exp.status, 
+      `INSERT INTO experiments (id, name, description, created_at, updated_at, completed_at, status, tubes, tube_positions, connections, warehouse_snapshot, initial_state_tubes, end_state_tubes, is_waste) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [exp.id, exp.name, exp.description || null, exp.created_at, exp.updated_at, exp.completed_at || null, exp.status,
        JSON.stringify(exp.tubes), JSON.stringify(exp.tube_positions || []), JSON.stringify(exp.connections),
-       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null]
+       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null,
+       exp.is_waste ? 1 : 0]
     )
   }
   saveDatabase()
@@ -611,6 +645,9 @@ ipcMain.handle('backup:import', async () => {
     const fileBuffer = fs.readFileSync(dbPath)
     db = new SQL.Database(fileBuffer)
 
+    // 执行迁移（旧备份可能缺少新列）
+    migrateDatabase()
+
     return {
       success: true,
       localStorage: backupData.localStorage || {},
@@ -659,6 +696,9 @@ ipcMain.handle('backup:restore-snapshot', async (_, snapshotId: string) => {
     }
     const fileBuffer = fs.readFileSync(dbPath)
     db = new SQL.Database(fileBuffer)
+
+    // 执行迁移（旧快照可能缺少新列）
+    migrateDatabase()
 
     return { success: true, localStorage: snapshot.localStorage }
   } catch (error) {
