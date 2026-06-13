@@ -300,7 +300,7 @@ async function createWindow() {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
-    icon: path.join(__dirname, '../build/icon.ico'),
+    icon: path.join(__dirname, 'build/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
