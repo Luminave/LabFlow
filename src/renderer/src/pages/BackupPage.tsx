@@ -63,9 +63,11 @@ export default function BackupPage() {
   // 恢复快照
   const handleRestoreSnapshot = (snapshot: SnapshotInfo) => {
     const timeStr = new Date(snapshot.timestamp).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')
+    const historiesCount = snapshot.stats.tubeHistories || snapshot.stats.histories
+    const colorsCount = snapshot.stats.substanceColors || 0
     if (!confirm(language === 'zh'
-      ? `⚠️ 确定要恢复到此快照？\n\n时间：${timeStr}\n试剂：${snapshot.stats.tubes} | 实验：${snapshot.stats.experiments} | 历史：${snapshot.stats.histories} | 分组：${snapshot.stats.groups}\n\n当前数据将被覆盖！`
-      : `⚠️ Restore to this snapshot?\n\nTime: ${timeStr}\nReagents: ${snapshot.stats.tubes} | Experiments: ${snapshot.stats.experiments} | Histories: ${snapshot.stats.histories} | Groups: ${snapshot.stats.groups}\n\nCurrent data will be overwritten!`)) {
+      ? `⚠️ 确定要恢复到此快照？\n\n时间：${timeStr}\n试剂：${snapshot.stats.tubes} | 实验：${snapshot.stats.experiments} | 历史：${historiesCount} | 分组：${snapshot.stats.groups} | 颜色：${colorsCount}\n\n当前数据将被覆盖！`
+      : `⚠️ Restore to this snapshot?\n\nTime: ${timeStr}\nReagents: ${snapshot.stats.tubes} | Experiments: ${snapshot.stats.experiments} | Histories: ${historiesCount} | Groups: ${snapshot.stats.groups} | Colors: ${colorsCount}\n\nCurrent data will be overwritten!`)) {
       return
     }
 
@@ -294,8 +296,9 @@ export default function BackupPage() {
                       <div className={styles.snapshotStats}>
                         <span>{language === 'zh' ? '试剂' : 'Reagents'}: {snapshot.stats.tubes}</span>
                         <span>{language === 'zh' ? '实验' : 'Experiments'}: {snapshot.stats.experiments}</span>
-                        <span>{language === 'zh' ? '历史' : 'Histories'}: {snapshot.stats.histories}</span>
+                        <span>{language === 'zh' ? '历史' : 'Histories'}: {snapshot.stats.tubeHistories || snapshot.stats.histories}</span>
                         <span>{language === 'zh' ? '分组' : 'Groups'}: {snapshot.stats.groups}</span>
+                        <span>{language === 'zh' ? '颜色' : 'Colors'}: {snapshot.stats.substanceColors || 0}</span>
                       </div>
                     </div>
                     <div className={styles.snapshotActions}>

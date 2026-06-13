@@ -42,20 +42,21 @@ export default function SettingsPage() {
   const handleClearAllData = () => {
     if (confirm(language === 'zh' ? '⚠️ 警告：此操作将清除所有数据！\n\n包括：\n- 所有试管数据\n- 所有实验记录\n- 所有试管历史\n- 所有颜色配置\n- 所有分组数据\n\n此操作不可恢复！' : '⚠️ Warning: This will clear ALL data!\n\nIncluding:\n- All tube data\n- All experiment records\n- All tube history\n- All color configs\n- All group data\n\nThis cannot be undone!')) {
       if (confirm(language === 'zh' ? '再次确认：真的要清除所有数据吗？\n\n这将删除所有记录，无法恢复！' : 'Confirm again: Really clear ALL data?\n\nThis will delete everything, cannot be undone!')) {
-        // 清除 localStorage
-        localStorage.removeItem('labflow_tubes')
+        // 清除当前实验缓存（仍在 localStorage 中）
         localStorage.removeItem('labflow_current_experiment')
-        localStorage.removeItem('labflow_experiments')
-        localStorage.removeItem('labflow_tube_histories')
-        localStorage.removeItem('labflow_substance_colors')
-        localStorage.removeItem('labflow_groups')
 
-        // 清除 SQLite 数据库
+        // 清除 SQLite 数据库（包含所有主要数据）
         if (window.electronAPI) {
           window.electronAPI.clearAllData().then(() => {
             window.location.reload()
           })
         } else {
+          // 非 Electron 环境，清除 localStorage 中的后备数据
+          localStorage.removeItem('labflow_tubes')
+          localStorage.removeItem('labflow_experiments')
+          localStorage.removeItem('labflow_tube_histories')
+          localStorage.removeItem('labflow_substance_colors')
+          localStorage.removeItem('labflow_groups')
           window.location.reload()
         }
       }
