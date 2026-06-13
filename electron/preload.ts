@@ -62,4 +62,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('backup:start-auto-backup', intervalMinutes, localStorageData),
     stopAutoBackup: () => ipcRenderer.invoke('backup:stop-auto-backup'),
   },
+
+  // 存储路径配置
+  config: {
+    getStorage: () => ipcRenderer.invoke('config:get-storage'),
+    showFolderDialog: (options: { title: string; defaultPath?: string }) =>
+      ipcRenderer.invoke('config:show-folder-dialog', options),
+    setDbPath: (newPath: string) => ipcRenderer.invoke('config:set-db-path', newPath),
+    setBackupDir: (newDir: string) => ipcRenderer.invoke('config:set-backup-dir', newDir),
+    resetPaths: () => ipcRenderer.invoke('config:reset-paths'),
+    restartApp: () => ipcRenderer.invoke('config:restart-app'),
+  },
 })

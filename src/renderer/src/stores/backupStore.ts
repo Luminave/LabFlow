@@ -28,10 +28,12 @@ interface BackupState {
   dbPath: string
   backupDir: string
   loading: boolean
+  storageConfig: StorageConfig | null
 
   // 操作
   loadSnapshots: () => Promise<void>
   loadPaths: () => Promise<void>
+  loadStorageConfig: () => Promise<void>
   exportBackup: () => Promise<boolean>
   importBackup: () => Promise<{ success: boolean; needsReload?: boolean }>
   createSnapshot: () => Promise<boolean>
@@ -39,6 +41,9 @@ interface BackupState {
   deleteSnapshot: (id: string) => Promise<void>
   updateSettings: (settings: Partial<BackupSettings>) => Promise<void>
   openBackupFolder: () => Promise<void>
+  changeDbPath: () => Promise<void>
+  changeBackupDir: () => Promise<void>
+  resetPaths: () => Promise<void>
 }
 
 const SETTINGS_KEY = 'labflow_backup_settings'
@@ -71,6 +76,7 @@ export const useBackupStore = create<BackupState>((set, get) => ({
   dbPath: '',
   backupDir: '',
   loading: false,
+  storageConfig: null,
 
   loadPaths: async () => {
     if (!isElectron()) return
@@ -83,6 +89,16 @@ export const useBackupStore = create<BackupState>((set, get) => ({
       set({ dbPath, backupDir })
     } catch (e) {
       console.error('Failed to load paths:', e)
+    }
+  },
+
+  loadStorageConfig: async () => {
+    if (!isElectron()) return
+    try {
+      const config = await window.electronAPI!.config.getStorage()
+      set({ storageConfig: config, dbPath: config.dbPath, backupDir: config.backupDir })
+    } catch (e) {
+      console.error('Failed to load storage config:', e)
     }
   },
 
@@ -336,6 +352,90 @@ export const useBackupStore = create<BackupState>((set, get) => ({
       await window.electronAPI!.backup.openFolder()
     } catch (e) {
       console.error('Failed to open backup folder:', e)
+    }
+  },
+
+  changeDbPath: async () => {
+    if (!isElectron()) return
+    try {
+      const dialogResult = await window.electronAPI!.config.showFolderDialog({
+        title: '选择数据库存储位置',
+        defaultPath: get().storageConfig?.dbPath ? get().storageConfig!.dbPath.replace(/[/\\][^/\\]+$/, '') : undefined
+      })
+
+      if (dialogResult.canceled || dialogResult.filePaths.length === 0) return
+
+      const selectedDir = dialogResult.filePaths[0]
+      const newPath = selectedDir + '\\labflow.db'
+
+      const result = await window.electronAPI!.config.setDbPath(newPath)
+
+      if (result.success) {
+        if (result.needsRestart) {
+          const confirmed = confirm('数据库路径已更改，需要重启应用才能生效。\n\n是否立即重启？')
+          if (confirmed) {
+            await window.electronAPI!.config.restartApp()
+          } else {
+            await get().loadStorageConfig()
+          }
+        } else {
+          await get().loadStorageConfig()
+        }
+      } else {
+        alert('设置失败：' + (result.error || '未知错误'))
+      }
+    } catch (e) {
+      console.error('Failed to change db path:', e)
+      alert('操作失败')
+    }
+  },
+
+  changeBackupDir: async () => {
+    if (!isElectron()) return
+    try {
+      const dialogResult = await window.electronAPI!.config.showFolderDialog({
+        title: '选择备份目录',
+        defaultPath: get().storageConfig?.backupDir
+      })
+
+      if (dialogResult.canceled || dialogResult.filePaths.length === 0) return
+
+      const newDir = dialogResult.filePaths[0]
+      const result = await window.electronAPI!.config.setBackupDir(newDir)
+
+      if (result.success) {
+        await get().loadStorageConfig()
+        if (result.changed) {
+          alert('备份目录已更新！\n\n注意：旧目录中的快照不会自动迁移。')
+        }
+      } else {
+        alert('设置失败：' + (result.error || '未知错误'))
+      }
+    } catch (e) {
+      console.error('Failed to change backup dir:', e)
+      alert('操作失败')
+    }
+  },
+
+  resetPaths: async () => {
+    if (!isElectron()) return
+    const confirmed = confirm('确定要重置为默认路径吗？\n\n数据库路径将恢复为默认位置，需要重启应用。')
+    if (!confirmed) return
+
+    try {
+      const result = await window.electronAPI!.config.resetPaths()
+      if (result.success) {
+        if (result.needsRestart) {
+          const restartNow = confirm('路径已重置，是否立即重启？')
+          if (restartNow) {
+            await window.electronAPI!.config.restartApp()
+          } else {
+            await get().loadStorageConfig()
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to reset paths:', e)
     }
   }
 }))

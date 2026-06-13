@@ -11,15 +11,20 @@ export default function BackupPage() {
     dbPath,
     backupDir,
     loading,
+    storageConfig,
     loadSnapshots,
     loadPaths,
+    loadStorageConfig,
     exportBackup,
     importBackup,
     createSnapshot,
     restoreSnapshot,
     deleteSnapshot,
     updateSettings,
-    openBackupFolder
+    openBackupFolder,
+    changeDbPath,
+    changeBackupDir,
+    resetPaths
   } = useBackupStore()
 
   const [intervalInput, setIntervalInput] = useState(settings.intervalMinutes.toString())
@@ -28,9 +33,9 @@ export default function BackupPage() {
   useEffect(() => {
     loadSnapshots()
     if (isElectron) {
-      loadPaths()
+      loadStorageConfig()
     }
-  }, [loadSnapshots, loadPaths, isElectron])
+  }, [loadSnapshots, loadStorageConfig, isElectron])
 
   useEffect(() => {
     setIntervalInput(settings.intervalMinutes.toString())
@@ -136,30 +141,52 @@ export default function BackupPage() {
       </header>
 
       <div className={styles.content}>
-        {/* 数据库信息 */}
+        {/* 存储路径配置 */}
         {isElectron && (
           <div className={styles.statsSection}>
             <h3>{language === 'zh' ? '💾 存储信息' : '💾 Storage Info'}</h3>
             <div className={styles.infoGrid}>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>
-                  {language === 'zh' ? '数据库路径' : 'Database Path'}
-                </span>
-                <span className={styles.infoValue}>{dbPath || '...'}</span>
+              <div className={styles.pathRow}>
+                <div className={styles.pathInfo}>
+                  <span className={styles.infoLabel}>
+                    {language === 'zh' ? '数据库路径' : 'Database Path'}
+                    {storageConfig?.isCustomDbPath && (
+                      <span className={styles.customBadge}>
+                        {language === 'zh' ? '自定义' : 'Custom'}
+                      </span>
+                    )}
+                  </span>
+                  <span className={styles.pathValue}>{dbPath || '...'}</span>
+                </div>
+                <button className={styles.pathChangeBtn} onClick={changeDbPath}>
+                  {language === 'zh' ? '更改...' : 'Change...'}
+                </button>
               </div>
-              <div className={styles.infoItem}>
-                <span className={styles.infoLabel}>
-                  {language === 'zh' ? '备份目录' : 'Backup Directory'}
-                </span>
-                <span className={styles.infoValue}>{backupDir || '...'}</span>
+              <div className={styles.pathRow}>
+                <div className={styles.pathInfo}>
+                  <span className={styles.infoLabel}>
+                    {language === 'zh' ? '备份目录' : 'Backup Directory'}
+                    {storageConfig?.isCustomBackupDir && (
+                      <span className={styles.customBadge}>
+                        {language === 'zh' ? '自定义' : 'Custom'}
+                      </span>
+                    )}
+                  </span>
+                  <span className={styles.pathValue}>{backupDir || '...'}</span>
+                </div>
+                <button className={styles.pathChangeBtn} onClick={changeBackupDir}>
+                  {language === 'zh' ? '更改...' : 'Change...'}
+                </button>
               </div>
             </div>
-            <button
-              className={styles.linkBtn}
-              onClick={openBackupFolder}
-            >
-              {language === 'zh' ? '📂 打开备份目录' : '📂 Open Backup Folder'}
-            </button>
+            <div className={styles.pathActions}>
+              <button className={styles.linkBtn} onClick={openBackupFolder}>
+                {language === 'zh' ? '📂 打开备份目录' : '📂 Open Backup Folder'}
+              </button>
+              <button className={styles.resetLink} onClick={resetPaths}>
+                {language === 'zh' ? '↩ 重置为默认路径' : '↩ Reset to Defaults'}
+              </button>
+            </div>
           </div>
         )}
 

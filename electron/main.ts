@@ -13,15 +13,60 @@ let SQL: any = null
 let db: any = null
 let dbInitPromise: Promise<any> | null = null
 
+// ==================== 配置管理 ====================
+
+interface LabFlowConfig {
+  dbPath?: string       // 数据库文件完整路径
+  backupDir?: string    // 备份目录完整路径
+  version?: number
+}
+
+const CONFIG_FILENAME = 'labflow.config.json'
+
+function getConfigPath(): string {
+  return path.join(app.getPath('userData'), CONFIG_FILENAME)
+}
+
+function loadConfig(): LabFlowConfig {
+  const configPath = getConfigPath()
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+function saveConfig(config: LabFlowConfig): void {
+  config.version = 1
+  fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2), 'utf-8')
+}
+
+function getDbPath(): string {
+  const config = loadConfig()
+  if (config.dbPath) return config.dbPath
+  return path.join(app.getPath('userData'), 'data', 'labflow.db')
+}
+
+function getBackupDir(): string {
+  const config = loadConfig()
+  const dir = config.backupDir || path.join(app.getPath('userData'), 'backups')
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+  return dir
+}
+
 // 数据库初始化
 async function initDatabase() {
   if (!SQL) {
     SQL = await initSqlJs({})
   }
 
-  const userDataPath = app.getPath('userData')
-  const dbDir = path.join(userDataPath, 'data')
-  const dbPath = path.join(dbDir, 'labflow.db')
+  const dbPath = getDbPath()
+  const dbDir = path.dirname(dbPath)
 
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true })
@@ -97,7 +142,11 @@ function saveDatabase() {
   if (db) {
     const data = db.export()
     const buffer = Buffer.from(data)
-    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbPath = getDbPath()
+    const dbDir = path.dirname(dbPath)
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+    }
     fs.writeFileSync(dbPath, buffer)
   }
 }
@@ -662,14 +711,6 @@ interface Manifest {
 let autoBackupTimer: ReturnType<typeof setInterval> | null = null
 let autoBackupIntervalMs: number = 30 * 60 * 1000 // 默认 30 分钟
 
-function getBackupDir(): string {
-  const dir = path.join(app.getPath('userData'), 'backups')
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-  return dir
-}
-
 function readManifest(): Manifest {
   const manifestPath = path.join(getBackupDir(), MANIFEST_FILENAME)
   if (fs.existsSync(manifestPath)) {
@@ -718,7 +759,7 @@ async function performSnapshot(localStorageData?: Record<string, string | null>)
     const snapshotId = crypto.randomUUID()
 
     // 复制数据库文件
-    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbPath = getDbPath()
     if (!fs.existsSync(dbPath)) {
       console.error('[Backup] Database file not found:', dbPath)
       return null
@@ -783,7 +824,7 @@ function stopAutoBackup() {
 
 // 获取数据库路径
 ipcMain.handle('backup:get-db-path', () => {
-  return path.join(app.getPath('userData'), 'data', 'labflow.db')
+  return getDbPath()
 })
 
 // 获取备份目录
@@ -845,7 +886,7 @@ ipcMain.handle('backup:export', async (_, localStorageData: Record<string, strin
     }
 
     // 读取数据库文件
-    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbPath = getDbPath()
     if (!fs.existsSync(dbPath)) {
       return { success: false, error: '数据库文件不存在' }
     }
@@ -912,7 +953,7 @@ ipcMain.handle('backup:import', async () => {
     }
 
     // 恢复数据库
-    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbPath = getDbPath()
     const dbDir = path.dirname(dbPath)
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true })
@@ -970,7 +1011,7 @@ ipcMain.handle('backup:restore-snapshot', async (_, snapshotId: string) => {
     }
 
     // 恢复数据库
-    const dbPath = path.join(app.getPath('userData'), 'data', 'labflow.db')
+    const dbPath = getDbPath()
     fs.copyFileSync(snapshotPath, dbPath)
 
     // 重新加载数据库
@@ -1032,4 +1073,143 @@ ipcMain.handle('backup:start-auto-backup', async (_, intervalMinutes: number, lo
 ipcMain.handle('backup:stop-auto-backup', async () => {
   stopAutoBackup()
   return { success: true }
+})
+
+// ==================== 存储路径配置 IPC Handlers ====================
+
+// 获取当前存储配置
+ipcMain.handle('config:get-storage', () => {
+  const config = loadConfig()
+  return {
+    dbPath: getDbPath(),
+    backupDir: getBackupDir(),
+    isCustomDbPath: !!config.dbPath,
+    isCustomBackupDir: !!config.backupDir,
+  }
+})
+
+// 弹出文件夹选择对话框
+ipcMain.handle('config:show-folder-dialog', async (_, options: { title: string; defaultPath?: string }) => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: options.title,
+    defaultPath: options.defaultPath,
+    properties: ['openDirectory', 'createDirectory']
+  })
+  return result
+})
+
+// 设置数据库路径（需要重启）
+ipcMain.handle('config:set-db-path', async (_, newPath: string) => {
+  try {
+    if (!path.isAbsolute(newPath)) {
+      return { success: false, error: '路径必须是绝对路径' }
+    }
+
+    // 如果传入的是目录，自动拼接文件名
+    if (!path.extname(newPath).toLowerCase().endsWith('.db')) {
+      newPath = path.join(newPath, 'labflow.db')
+    }
+
+    const dbDir = path.dirname(newPath)
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+    }
+
+    // 测试目录可写性
+    const testFile = path.join(dbDir, '.labflow_write_test')
+    try {
+      fs.writeFileSync(testFile, '')
+      fs.unlinkSync(testFile)
+    } catch {
+      return { success: false, error: '目录不可写，请选择其他位置' }
+    }
+
+    const currentDbPath = getDbPath()
+
+    // 路径未变更
+    if (path.resolve(newPath) === path.resolve(currentDbPath)) {
+      return { success: true, changed: false }
+    }
+
+    // 目标位置已存在文件（且不是当前数据库）
+    if (fs.existsSync(newPath) && path.resolve(newPath) !== path.resolve(currentDbPath)) {
+      return { success: false, error: '目标位置已存在数据库文件，请先手动处理冲突' }
+    }
+
+    // 先将内存中的数据库保存到旧路径
+    saveDatabase()
+
+    // 复制数据库文件到新位置
+    if (fs.existsSync(currentDbPath)) {
+      fs.copyFileSync(currentDbPath, newPath)
+    }
+
+    // 保存配置
+    const config = loadConfig()
+    config.dbPath = newPath
+    saveConfig(config)
+
+    return { success: true, changed: true, needsRestart: true }
+  } catch (error) {
+    console.error('[Config] Set db path failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 设置备份目录
+ipcMain.handle('config:set-backup-dir', async (_, newDir: string) => {
+  try {
+    if (!path.isAbsolute(newDir)) {
+      return { success: false, error: '路径必须是绝对路径' }
+    }
+
+    if (!fs.existsSync(newDir)) {
+      fs.mkdirSync(newDir, { recursive: true })
+    }
+
+    // 测试目录可写性
+    const testFile = path.join(newDir, '.labflow_write_test')
+    try {
+      fs.writeFileSync(testFile, '')
+      fs.unlinkSync(testFile)
+    } catch {
+      return { success: false, error: '目录不可写，请选择其他位置' }
+    }
+
+    const currentBackupDir = getBackupDir()
+
+    // 路径未变更
+    if (path.resolve(newDir) === path.resolve(currentBackupDir)) {
+      return { success: true, changed: false }
+    }
+
+    // 保存配置
+    const config = loadConfig()
+    config.backupDir = newDir
+    saveConfig(config)
+
+    return { success: true, changed: true }
+  } catch (error) {
+    console.error('[Config] Set backup dir failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 重置为默认路径
+ipcMain.handle('config:reset-paths', async () => {
+  try {
+    const config = loadConfig()
+    delete config.dbPath
+    delete config.backupDir
+    saveConfig(config)
+    return { success: true, needsRestart: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 重启应用
+ipcMain.handle('config:restart-app', () => {
+  app.relaunch()
+  app.exit(0)
 })

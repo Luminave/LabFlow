@@ -32,6 +32,24 @@ interface BackupAPI {
   stopAutoBackup: () => Promise<{ success: boolean }>
 }
 
+// 存储配置
+interface StorageConfig {
+  dbPath: string
+  backupDir: string
+  isCustomDbPath: boolean
+  isCustomBackupDir: boolean
+}
+
+// 存储配置 API
+interface ConfigAPI {
+  getStorage: () => Promise<StorageConfig>
+  showFolderDialog: (options: { title: string; defaultPath?: string }) => Promise<{ canceled: boolean; filePaths: string[] }>
+  setDbPath: (newPath: string) => Promise<{ success: boolean; changed?: boolean; needsRestart?: boolean; error?: string }>
+  setBackupDir: (newDir: string) => Promise<{ success: boolean; changed?: boolean; error?: string }>
+  resetPaths: () => Promise<{ success: boolean; needsRestart?: boolean; error?: string }>
+  restartApp: () => Promise<void>
+}
+
 interface ElectronAPI {
   getAppPath: () => Promise<string>
   getTubes: () => Promise<any[]>
@@ -66,6 +84,7 @@ interface ElectronAPI {
 
   clearAllData: () => Promise<{ success: boolean; error?: string }>
   backup: BackupAPI
+  config: ConfigAPI
 }
 
 declare global {

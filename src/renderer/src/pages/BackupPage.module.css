@@ -405,6 +405,80 @@
   gap: 4px;
 }
 
+.pathRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.pathInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pathValue {
+  flex: 1;
+  font-size: 13px;
+  color: #1e293b;
+  font-family: monospace;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  word-break: break-all;
+  border: 1px solid #e2e8f0;
+}
+
+.pathChangeBtn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.pathChangeBtn:hover {
+  background: #2563eb;
+}
+
+.customBadge {
+  font-size: 11px;
+  color: #f59e0b;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.pathActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.resetLink {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 0;
+  transition: color 0.2s;
+}
+
+.resetLink:hover {
+  color: #64748b;
+}
+
 .infoLabel {
   font-size: 12px;
   color: #64748b;
