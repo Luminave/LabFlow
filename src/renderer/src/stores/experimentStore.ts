@@ -1273,8 +1273,12 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       }
       history.records = history.records.filter(r => r.experimentId !== experimentId)
     })
-    await saveHistories(histories)
-    
+    try {
+      await saveHistories(histories)
+    } catch (e) {
+      console.error('[revertExperiment] Failed to save tube histories:', e)
+    }
+
     const revertedExperiment = { ...experiment, status: 'reverted' as const, updatedAt: new Date().toISOString() }
     if (window.electronAPI) {
       await window.electronAPI.saveExperiment(experimentToDb(revertedExperiment))
