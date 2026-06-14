@@ -30,3 +30,6 @@ npm-debug.log*
 # Electron
 release/
 dist-electron/
+
+# Claude Code
+CLAUDE.md
