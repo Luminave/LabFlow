@@ -1582,8 +1582,8 @@ export default function ExperimentPage() {
 
       {/* 工程管理弹窗 */}
       {showExperimentManager && (
-        <div className={styles.modal} onClick={() => { setShowExperimentManager(false); setExperimentSearch('') }}>
-          <div className={styles.modalContentWide} onClick={e => e.stopPropagation()}>
+        <div className={styles.modal}>
+          <div className={styles.modalContentWide}>
             <h2 className={styles.modalTitle}>{t('modal.projectManagement', language)}</h2>
 
             <input
@@ -1646,8 +1646,8 @@ export default function ExperimentPage() {
 
       {/* 另存为弹窗 */}
       {showSaveAs && (
-        <div className={styles.modal} onClick={() => setShowSaveAs(false)}>
-          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <div className={styles.modal}>
+          <div className={styles.modalContent}>
             <h3>{t('modal.saveAs', language)}</h3>
             <input
               type="text"
@@ -1670,8 +1670,8 @@ export default function ExperimentPage() {
 
       {/* 试管选择器 */}
       {showTubeSelector && (
-        <div className={styles.modal} onClick={() => setShowTubeSelector(false)}>
-          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+        <div className={styles.modal}>
+          <div className={styles.modalContent}>
             <h3>{t('modal.selectTube', language)}</h3>
             <div className={styles.tubeList}>
               {sourceTubes.map(tube => (
@@ -1704,8 +1704,8 @@ export default function ExperimentPage() {
 
       {/* 试管详情/编辑 */}
       {editingTube && (
-        <div className={styles.modal} onClick={() => setEditingTube(null)}>
-          <div className={styles.editModalContent} onClick={e => e.stopPropagation()}>
+        <div className={styles.modal}>
+          <div className={styles.editModalContent}>
             <div className={styles.modalHeader}>
               <h3>{editingTube.name}</h3>
               <button className={styles.traceBtn} onClick={handleGoToTrace}>
@@ -1955,8 +1955,8 @@ export default function ExperimentPage() {
 
       {/* 连接线编辑弹窗 */}
       {editingEdge && (
-        <div className={styles.modal} onClick={() => setEditingEdge(null)}>
-          <div className={styles.editModalContent} onClick={e => e.stopPropagation()}>
+        <div className={styles.modal}>
+          <div className={styles.editModalContent}>
             <div className={styles.modalHeader}>
               <h3>{language === 'zh' ? '移液连接线' : 'Transfer Connection'}</h3>
             </div>

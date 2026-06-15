@@ -545,8 +545,8 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
   }
   
   return (
-    <div className={styles.modal} onClick={onClose}>
-      <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+    <div className={styles.modal}>
+      <div className={styles.modalContent}>
         <h2 className={styles.modalTitle}>编辑分组</h2>
         
         <form onSubmit={handleSubmit} className={styles.form}>
@@ -662,8 +662,8 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
   }
   
   return (
-    <div className={styles.modal} onClick={onClose}>
-      <div className={styles.modalContentWide} onClick={e => e.stopPropagation()}>
+    <div className={styles.modal}>
+      <div className={styles.modalContentWide}>
         <h2 className={styles.modalTitle}>添加试剂</h2>
         
         <form onSubmit={handleSubmit} className={styles.form}>
@@ -923,8 +923,8 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
   }
   
   return (
-    <div className={styles.modal} onClick={onClose}>
-      <div className={styles.modalContentWide} onClick={e => e.stopPropagation()}>
+    <div className={styles.modal}>
+      <div className={styles.modalContentWide}>
         <h2 className={styles.modalTitle}>试剂详情</h2>
         
         <form onSubmit={handleSubmit} className={styles.form}>
