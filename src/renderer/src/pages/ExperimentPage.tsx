@@ -1341,8 +1341,11 @@ export default function ExperimentPage() {
 
   // 打开已有实验
   const handleOpenExperiment = (id: string) => {
-    loadExperiment(id)
+    const success = loadExperiment(id)
     setShowExperimentManager(false)
+    if (!success) {
+      alert(language === 'zh' ? '打开工程失败，数据可能已损坏。请尝试从备份恢复。' : 'Failed to open project, data may be corrupted. Please try restoring from backup.')
+    }
   }
 
   // 删除实验

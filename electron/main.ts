@@ -375,8 +375,8 @@ ipcMain.handle('db:addTube', async (_, tube: any) => {
 ipcMain.handle('db:updateTube', async (_, tube: any) => {
   await ensureDb()
   db.run(
-    `UPDATE tubes SET name = ?, total_volume = ?, total_volume_unit = ?, remaining_volume = ?, remaining_volume_unit = ?, substances = ?, updated_at = ?, status = ?, storage_location = ?, storage_condition = ?, notes = ?, tags = ? WHERE id = ?`,
-    [tube.name, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.updatedAt, tube.status, tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.id]
+    `UPDATE tubes SET name = ?, type = ?, total_volume = ?, total_volume_unit = ?, remaining_volume = ?, remaining_volume_unit = ?, substances = ?, updated_at = ?, status = ?, storage_location = ?, storage_condition = ?, notes = ?, tags = ?, group_id = ? WHERE id = ?`,
+    [tube.name, tube.type, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.updatedAt, tube.status, tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.groupId || null, tube.id]
   )
   saveDatabase()
   return tube

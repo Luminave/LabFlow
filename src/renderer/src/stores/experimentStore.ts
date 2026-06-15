@@ -209,8 +209,46 @@ interface ExperimentState {
   setExperimentAsWaste: (isWaste: boolean) => void
 }
 
+// 试管数据完整性修复（兼容旧数据格式）
+function sanitizeTube(tube: any): Tube {
+  return {
+    id: tube.id || crypto.randomUUID(),
+    name: tube.name || '未命名试管',
+    type: tube.type || 'intermediate',
+    totalVolume: tube.totalVolume ?? 0,
+    totalVolumeUnit: tube.totalVolumeUnit || 'μL',
+    remainingVolume: tube.remainingVolume ?? 0,
+    remainingVolumeUnit: tube.remainingVolumeUnit || 'μL',
+    substances: Array.isArray(tube.substances) ? tube.substances : [],
+    createdAt: tube.createdAt || new Date().toISOString(),
+    updatedAt: tube.updatedAt || new Date().toISOString(),
+    status: tube.status || 'active',
+    // 可选字段保留原值
+    selectedBuffer: tube.selectedBuffer,
+    asSource: tube.asSource,
+    configOrder: tube.configOrder,
+    tubeNumber: tube.tubeNumber,
+    groupId: tube.groupId,
+    storageLocation: tube.storageLocation,
+    storageCondition: tube.storageCondition,
+    notes: tube.notes,
+    tags: tube.tags
+  }
+}
+
 // 数据库记录转换
 function dbToExperiment(record: any): Experiment {
+  const tubes = JSON.parse(record.tubes || '[]').map(sanitizeTube)
+  const initialStateTubes = record.initial_state_tubes
+    ? JSON.parse(record.initial_state_tubes).map(sanitizeTube)
+    : undefined
+  const endStateTubes = record.end_state_tubes
+    ? JSON.parse(record.end_state_tubes).map(sanitizeTube)
+    : undefined
+  const warehouseSnapshot = record.warehouse_snapshot
+    ? JSON.parse(record.warehouse_snapshot).map(sanitizeTube)
+    : undefined
+
   return {
     id: record.id,
     name: record.name,
@@ -219,12 +257,12 @@ function dbToExperiment(record: any): Experiment {
     updatedAt: record.updated_at,
     completedAt: record.completed_at || undefined,
     status: record.status,
-    tubes: JSON.parse(record.tubes || '[]'),
+    tubes,
     tubePositions: JSON.parse(record.tube_positions || '[]'),
     connections: JSON.parse(record.connections || '[]'),
-    warehouseSnapshot: record.warehouse_snapshot ? JSON.parse(record.warehouse_snapshot) : undefined,
-    initialStateTubes: record.initial_state_tubes ? JSON.parse(record.initial_state_tubes) : undefined,
-    endStateTubes: record.end_state_tubes ? JSON.parse(record.end_state_tubes) : undefined,
+    warehouseSnapshot,
+    initialStateTubes,
+    endStateTubes,
     isWaste: record.is_waste === 1 || record.is_waste === true
   }
 }
@@ -460,7 +498,19 @@ function saveExperimentsToStorage(experiments: Experiment[]) {
 function loadExperimentsFromStorage(): Experiment[] {
   try {
     const data = localStorage.getItem(EXPERIMENTS_KEY)
-    if (data) return JSON.parse(data)
+    if (data) {
+      const experiments = JSON.parse(data)
+      // 确保试管数据完整
+      return experiments.map((exp: any) => ({
+        ...exp,
+        tubes: (exp.tubes || []).map(sanitizeTube),
+        initialStateTubes: exp.initialStateTubes ? exp.initialStateTubes.map(sanitizeTube) : undefined,
+        endStateTubes: exp.endStateTubes ? exp.endStateTubes.map(sanitizeTube) : undefined,
+        warehouseSnapshot: exp.warehouseSnapshot ? exp.warehouseSnapshot.map(sanitizeTube) : undefined,
+        connections: exp.connections || [],
+        tubePositions: exp.tubePositions || []
+      }))
+    }
   } catch (e) {
     console.error('Failed to load experiments from localStorage:', e)
   }
@@ -612,29 +662,42 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   },
   
   loadExperiment: (id) => {
-    const experiment = get().experiments.find(e => e.id === id)
-    if (!experiment) {
-      console.warn('[loadExperiment] Experiment not found:', id)
+    try {
+      const experiment = get().experiments.find(e => e.id === id)
+      if (!experiment) {
+        console.warn('[loadExperiment] Experiment not found:', id)
+        return false
+      }
+
+      // 确保 tubes 数据完整（兼容旧数据格式）
+      const safeTubes = (experiment.tubes || []).map(sanitizeTube)
+      const safeInitialTubes = experiment.initialStateTubes
+        ? experiment.initialStateTubes.map(sanitizeTube)
+        : undefined
+      const displayTubes = safeInitialTubes || safeTubes
+
+      const safeConnections = experiment.connections || []
+      const safePositions = experiment.tubePositions || []
+
+      set({
+        currentExperiment: { ...experiment, tubes: safeTubes, initialStateTubes: safeInitialTubes },
+        currentTubes: displayTubes,
+        connections: safeConnections,
+        tubePositions: safePositions,
+        showEndState: false
+      })
+
+      saveCurrentExperimentToStorage({
+        currentExperiment: { ...experiment, tubes: safeTubes, initialStateTubes: safeInitialTubes },
+        currentTubes: displayTubes,
+        connections: safeConnections,
+        tubePositions: safePositions
+      })
+      return true
+    } catch (e) {
+      console.error('[loadExperiment] Failed to load experiment:', e)
       return false
     }
-
-    const displayTubes = experiment.initialStateTubes || experiment.tubes || []
-
-    set({
-      currentExperiment: experiment,
-      currentTubes: displayTubes,
-      connections: experiment.connections || [],
-      tubePositions: experiment.tubePositions || [],
-      showEndState: false
-    })
-
-    saveCurrentExperimentToStorage({
-      currentExperiment: experiment,
-      currentTubes: displayTubes,
-      connections: experiment.connections || [],
-      tubePositions: experiment.tubePositions || []
-    })
-    return true
   },
   
   deleteExperiment: async (id) => {
@@ -1394,28 +1457,37 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   },
   
   loadSavedExperiment: () => {
-    const saved = loadCurrentExperimentFromStorage()
-    if (saved && saved.currentExperiment) {
-      // 同时将加载的实验合并到 experiments 列表中
-      // 防止 fetchExperiments 先执行但找不到当前实验的情况
-      const experiments = get().experiments
-      const existingIndex = experiments.findIndex(e => e.id === saved.currentExperiment!.id)
-      let newExperiments: Experiment[]
-      if (existingIndex >= 0) {
-        newExperiments = experiments.map(e => e.id === saved.currentExperiment!.id ? saved.currentExperiment! : e)
-      } else {
-        newExperiments = [...experiments, saved.currentExperiment!]
+    try {
+      const saved = loadCurrentExperimentFromStorage()
+      if (saved && saved.currentExperiment) {
+        // 确保试管数据完整
+        const safeTubes = (saved.currentTubes || []).map(sanitizeTube)
+
+        // 同时将加载的实验合并到 experiments 列表中
+        // 防止 fetchExperiments 先执行但找不到当前实验的情况
+        const experiments = get().experiments
+        const existingIndex = experiments.findIndex(e => e.id === saved.currentExperiment!.id)
+        let newExperiments: Experiment[]
+        if (existingIndex >= 0) {
+          newExperiments = experiments.map(e => e.id === saved.currentExperiment!.id ? saved.currentExperiment! : e)
+        } else {
+          newExperiments = [...experiments, saved.currentExperiment!]
+        }
+
+        set({
+          currentExperiment: saved.currentExperiment,
+          currentTubes: safeTubes,
+          connections: saved.connections || [],
+          tubePositions: saved.tubePositions || [],
+          experiments: newExperiments,
+          showEndState: false
+        })
+        console.log('[loadSavedExperiment] Restored experiment:', saved.currentExperiment.name, 'experiments count:', newExperiments.length)
       }
-      
-      set({
-        currentExperiment: saved.currentExperiment,
-        currentTubes: saved.currentTubes,
-        connections: saved.connections,
-        tubePositions: saved.tubePositions || [],
-        experiments: newExperiments,
-        showEndState: false
-      })
-      console.log('[loadSavedExperiment] Restored experiment:', saved.currentExperiment.name, 'experiments count:', newExperiments.length)
+    } catch (e) {
+      console.error('[loadSavedExperiment] Failed to load saved experiment:', e)
+      // 清除损坏的缓存数据
+      localStorage.removeItem(CURRENT_EXPERIMENT_KEY)
     }
   },
   

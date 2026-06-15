@@ -113,8 +113,12 @@ export default function HomePage() {
   // 打开实验
   const handleOpenExperiment = (experimentId: string, status: string) => {
     const store = useExperimentStore.getState()
-    store.loadExperiment(experimentId)
-    navigate(`/experiment/${experimentId}`)
+    const success = store.loadExperiment(experimentId)
+    if (success) {
+      navigate(`/experiment/${experimentId}`)
+    } else {
+      alert(language === 'zh' ? '打开工程失败，数据可能已损坏。请尝试从备份恢复。' : 'Failed to open project, data may be corrupted. Please try restoring from backup.')
+    }
   }
 
   // 跳转到实验记录页面并加载指定实验
@@ -122,8 +126,12 @@ export default function HomePage() {
     if (experimentId) {
       // 先加载实验,然后跳转到实验页面查看
       const store = useExperimentStore.getState()
-      store.loadExperiment(experimentId)
-      navigate(`/experiment/${experimentId}`)
+      const success = store.loadExperiment(experimentId)
+      if (success) {
+        navigate(`/experiment/${experimentId}`)
+      } else {
+        alert(language === 'zh' ? '打开工程失败，数据可能已损坏。' : 'Failed to open project, data may be corrupted.')
+      }
     } else {
       navigate('/history')
     }

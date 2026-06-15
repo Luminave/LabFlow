@@ -39,6 +39,7 @@ export default function WarehousePage() {
   const { groups, addGroup, updateGroup, loadGroups, generateGroupName } = useGroupStore()
   const { language } = useI18nStore()
   const [showAddForm, setShowAddForm] = useState(false)
+  const [addFormKey, setAddFormKey] = useState(0)
   const [editingTube, setEditingTube] = useState<any>(null)
   const [editingGroup, setEditingGroup] = useState<TubeGroup | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -254,14 +255,15 @@ export default function WarehousePage() {
           <button className={styles.addGroupButton} onClick={handleAddGroup}>
             📁 {language === 'zh' ? '新增分组' : 'New Group'}
           </button>
-          <button className={styles.addButton} onClick={() => setShowAddForm(true)}>
+          <button className={styles.addButton} onClick={() => { setAddFormKey(k => k + 1); setShowAddForm(true) }}>
             + {language === 'zh' ? '添加试剂' : 'Add Reagent'}
           </button>
         </div>
       </header>
       
       {showAddForm && (
-        <AddTubeForm 
+        <AddTubeForm
+          key={addFormKey}
           onClose={() => setShowAddForm(false)}
           onSubmit={handleAddTube}
           groups={groups}
@@ -764,8 +766,9 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                   type="text"
                   value={sub.name}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].name = e.target.value
+                    const newSubs = formData.substances.map((s, idx) =>
+                      idx === i ? { ...s, name: e.target.value } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                   placeholder="物质名称"
@@ -774,8 +777,9 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                   type="number"
                   value={sub.concentration || ''}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].concentration = Number(e.target.value)
+                    const newSubs = formData.substances.map((s, idx) =>
+                      idx === i ? { ...s, concentration: Number(e.target.value) } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                   placeholder="浓度"
@@ -785,8 +789,9 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                 <select
                   value={sub.concentrationUnit}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].concentrationUnit = e.target.value as any
+                    const newSubs = formData.substances.map((s, idx) =>
+                      idx === i ? { ...s, concentrationUnit: e.target.value as any } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                 >
@@ -820,7 +825,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
             </button>
           </div>
           )}
-          
+
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
               <label>存储位置</label>
@@ -831,7 +836,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                 placeholder="如: 冰箱 A 层 2"
               />
             </div>
-            
+
             <div className={styles.formGroup}>
               <label>存储条件</label>
               <input
@@ -842,7 +847,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
               />
             </div>
           </div>
-          
+
           <div className={styles.formActions}>
             <button type="button" className={styles.cancelBtn} onClick={onClose}>
               取消
@@ -1049,8 +1054,9 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                   type="text"
                   value={sub.name}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].name = e.target.value
+                    const newSubs = formData.substances.map((s: any, idx: number) =>
+                      idx === i ? { ...s, name: e.target.value } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                   placeholder="物质名称"
@@ -1059,8 +1065,9 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                   type="number"
                   value={sub.concentration || ''}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].concentration = Number(e.target.value)
+                    const newSubs = formData.substances.map((s: any, idx: number) =>
+                      idx === i ? { ...s, concentration: Number(e.target.value) } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                   placeholder="浓度"
@@ -1070,8 +1077,9 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                 <select
                   value={sub.concentrationUnit}
                   onChange={(e) => {
-                    const newSubs = [...formData.substances]
-                    newSubs[i].concentrationUnit = e.target.value as any
+                    const newSubs = formData.substances.map((s: any, idx: number) =>
+                      idx === i ? { ...s, concentrationUnit: e.target.value as any } : s
+                    )
                     setFormData({ ...formData, substances: newSubs })
                   }}
                 >
