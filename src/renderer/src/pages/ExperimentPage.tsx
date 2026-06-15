@@ -651,7 +651,10 @@ export default function ExperimentPage() {
             isBuffer: tube.type === 'buffer',
             endStateVolume: endVolumeMap.get(tube.id),
             initialVolume: initialVolumeMap.get(tube.id),
-            isInWarehouse: isInWarehouseMap.get(tube.id)
+            isInWarehouse: isInWarehouseMap.get(tube.id),
+            isReadOnly,
+            onUpdateTube: handleInlineUpdate,
+            onOpenDetail: handleOpenDetail
           }
         }
       }).filter(Boolean) as Node[]
@@ -799,11 +802,8 @@ export default function ExperimentPage() {
   }
 
   // 点击试管
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    event.stopPropagation()
-    const tubeData = node.data as { tube: Tube }
-    const tube = tubeData.tube
-
+  // 打开试管详情弹窗(由卡片上的 ... 按钮触发)
+  const handleOpenDetail = useCallback((tube: Tube) => {
     // 优先使用试管数据中保存的 selectedBuffer
     let selectedBuffer = tube.selectedBuffer || ''
 
@@ -932,23 +932,22 @@ export default function ExperimentPage() {
   }
 
   // 执行自动计算
-  const performAutoCalculate = (silent: boolean = false) => {
-    if (!editingTube) return false
-
-    const incomingConns = connections.filter(c => c.toTubeId === editingTube.id)
+  // 核心计算函数 - 参数化版本(模态框编辑和内联编辑共用)
+  const calculateForTube = (tube: Tube, formData: { targetVolume: number; substances: Substance[]; selectedBuffer: string }, silent: boolean = false) => {
+    const incomingConns = connections.filter(c => c.toTubeId === tube.id)
     if (incomingConns.length === 0) {
       if (!silent) alert('请先从源试管连线到此试管')
       return false
     }
 
-    const targetVolume = editFormData.targetVolume
+    const targetVolume = formData.targetVolume
 
     // 按源试管分组,计算每个源试管需要的移液体积
     const sourceTubeVolumes = new Map<string, number>()
     let hasMissingSource = false
     const missingSubstances: string[] = []
 
-    for (const targetSub of editFormData.substances) {
+    for (const targetSub of formData.substances) {
       if (!targetSub.name || targetSub.concentration <= 0) continue
 
       let foundSource = false
@@ -1011,16 +1010,16 @@ export default function ExperimentPage() {
     // 处理缓冲液连接
     // 先查找所有现有的缓冲液连接
     const existingBufferConns = connections.filter(c =>
-      c.toTubeId === editingTube.id &&
+      c.toTubeId === tube.id &&
       currentTubes.find(t => t.id === c.fromTubeId)?.type === 'buffer'
     )
 
     // 计算需要的缓冲液体积
     const bufferVolume = targetVolume > totalSubstanceVolume ? targetVolume - totalSubstanceVolume : 0
 
-    if (bufferVolume > 0 && editFormData.selectedBuffer) {
+    if (bufferVolume > 0 && formData.selectedBuffer) {
       // 需要缓冲液
-      const bufferTemplate = warehouseTubes.find(t => t.id === editFormData.selectedBuffer)
+      const bufferTemplate = warehouseTubes.find(t => t.id === formData.selectedBuffer)
       if (bufferTemplate) {
         // 查找是否已有同类型的缓冲液连接
         const existingSameBufferConn = existingBufferConns.find(c =>
@@ -1038,7 +1037,7 @@ export default function ExperimentPage() {
           }))
         } else {
           // 创建新的缓冲液连接
-          const bufferNodeId = `buffer-${bufferTemplate.id}-${editingTube.id}`
+          const bufferNodeId = `buffer-${bufferTemplate.id}-${tube.id}`
 
           const bufferTube: Tube = {
             ...bufferTemplate,
@@ -1051,13 +1050,13 @@ export default function ExperimentPage() {
 
           addConnection({
             fromTubeId: bufferNodeId,
-            toTubeId: editingTube.id,
+            toTubeId: tube.id,
             volume: bufferVolume,
             volumeUnit: 'μL'
           })
 
-          const targetPosition = tubePositions.find(p => p.tubeId === editingTube.id) ||
-            nodes.find(n => n.id === editingTube.id)?.position || { x: 200, y: 200 }
+          const targetPosition = tubePositions.find(p => p.tubeId === tube.id) ||
+            nodes.find(n => n.id === tube.id)?.position || { x: 200, y: 200 }
           const bufferPosition = { x: targetPosition.x - 80, y: targetPosition.y - 60 }
 
           updateTubePosition(bufferNodeId, bufferPosition.x, bufferPosition.y)
@@ -1106,6 +1105,12 @@ export default function ExperimentPage() {
     return true
   }
 
+  // 模态框编辑的自动计算(兼容旧调用)
+  const performAutoCalculate = (silent: boolean = false) => {
+    if (!editingTube) return false
+    return calculateForTube(editingTube, editFormData, silent)
+  }
+
   // 自动计算按钮 - 先保存再计算
   const handleAutoCalculate = () => {
     if (!editingTube || isReadOnly) return
@@ -1129,6 +1134,43 @@ export default function ExperimentPage() {
     // 然后执行计算(带提示)
     performAutoCalculate(false)
     // 不关闭详情窗口
+  }
+
+  // 内联编辑更新 - 试管卡片上直接编辑后调用
+  // 不用 useCallback,因为节点数据在 useEffect 中重建时会捕获最新函数
+  const handleInlineUpdate = (tubeId: string, updates: Partial<Tube>, shouldCalculate?: boolean) => {
+    if (isReadOnly) return
+
+    // 管号同步名称:如果启用 syncTubeName 且更新了管号,自动同步名称
+    if (syncTubeName && updates.tubeNumber !== undefined) {
+      const tube = currentTubes.find(t => t.id === tubeId)
+      if (tube && tube.type === 'intermediate') {
+        updates.name = `${experimentDate}-${updates.tubeNumber}`
+      }
+    }
+
+    // 保存到 store
+    updateTubeInExperiment(tubeId, updates)
+
+    // 如果需要计算,构造 formData 并调用计算
+    if (shouldCalculate) {
+      const tube = currentTubes.find(t => t.id === tubeId)
+      if (tube) {
+        const mergedTube = { ...tube, ...updates }
+        const formData = {
+          targetVolume: mergedTube.totalVolume,
+          substances: mergedTube.substances,
+          selectedBuffer: mergedTube.selectedBuffer || ''
+        }
+        // 有物质且有连线时才计算
+        if (formData.substances.length > 0) {
+          const incomingConns = connections.filter(c => c.toTubeId === tubeId)
+          if (incomingConns.length > 0) {
+            calculateForTube(mergedTube, formData, true)
+          }
+        }
+      }
+    }
   }
 
   // 从仓库添加试管
@@ -1548,7 +1590,6 @@ export default function ExperimentPage() {
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onEdgeDoubleClick={onEdgeDoubleClick}
-            onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView

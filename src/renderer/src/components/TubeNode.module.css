@@ -102,6 +102,30 @@
   border-top: 1px solid #e2e8f0;
 }
 
+/* 详情按钮 - 卡片右下角 */
+.detailBtn {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 1px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  z-index: 2;
+  transition: all 0.15s;
+}
+
+.detailBtn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #475569;
+}
+
 /* 连接点样式 - 不覆盖位置 */
 .handle {
   width: 14px !important;
@@ -191,6 +215,49 @@
 .bufferHandle:hover {
   background: #0369a1 !important;
   box-shadow: 0 0 0 2px rgba(3, 105, 161, 0.4), 0 0 0 4px rgba(3, 105, 161, 0.2) !important;
+}
+
+/* 内联编辑 - 可编辑字段 hover 提示 */
+.editableField {
+  cursor: text;
+  border: 1px dashed #c7d2fe;
+  background: rgba(79, 70, 229, 0.04);
+  transition: all 0.15s;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.editableField:hover {
+  background: rgba(79, 70, 229, 0.12);
+  border-color: #818cf8;
+}
+
+/* 内联编辑 - 输入框样式 */
+.inlineEditInput {
+  border: 1px solid #818cf8;
+  outline: none;
+  background: rgba(79, 70, 229, 0.08);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  width: auto;
+  min-width: 30px;
+  max-width: 100%;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.inlineEditInput[type="number"] {
+  width: 60px;
+  -moz-appearance: textfield;
+}
+
+.inlineEditInput[type="number"]::-webkit-outer-spin-button,
+.inlineEditInput[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 /* 作为原料标签 */
