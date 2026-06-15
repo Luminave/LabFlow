@@ -31,6 +31,9 @@ function SubstanceDisplay({ name, concentration, concentrationUnit }: { name: st
 const COLLAPSED_KEY = 'labflow_collapsed_groups'
 const FLASH_KEY = 'labflow_flash_target'
 
+// 聚焦时自动选中全部文本，方便快速替换
+const selectOnFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.target.select()
+
 export default function WarehousePage() {
   const navigate = useNavigate()
   const { tubes, addTube, deleteTube, updateTubeStatus, updateTube, fetchTubes, loading } = useWarehouseStore()
@@ -556,6 +559,7 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
+              onFocus={selectOnFocus}
               autoFocus
             />
           </div>
@@ -586,6 +590,7 @@ function GroupEditModal({ group, onClose, onSave, onDelete }: any) {
             <textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
+              onFocus={selectOnFocus}
               placeholder="分组备注..."
               rows={2}
             />
@@ -665,7 +670,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
     <div className={styles.modal}>
       <div className={styles.modalContentWide}>
         <h2 className={styles.modalTitle}>添加试剂</h2>
-        
+
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
@@ -674,6 +679,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: E1, DNA Sample A"
                 autoFocus
               />
@@ -699,11 +705,12 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
               <input
                 type="number"
                 value={formData.isInfinite ? '' : formData.totalVolume}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
+                onChange={(e) => setFormData({
+                  ...formData,
                   totalVolume: Number(e.target.value),
                   remainingVolume: Number(e.target.value)
                 })}
+                onFocus={selectOnFocus}
                 min="0"
                 step="0.1"
                 disabled={formData.isInfinite}
@@ -771,6 +778,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                     )
                     setFormData({ ...formData, substances: newSubs })
                   }}
+                  onFocus={selectOnFocus}
                   placeholder="物质名称"
                 />
                 <input
@@ -782,6 +790,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                     )
                     setFormData({ ...formData, substances: newSubs })
                   }}
+                  onFocus={selectOnFocus}
                   placeholder="浓度"
                   min="0"
                   step="0.01"
@@ -833,6 +842,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                 type="text"
                 value={formData.storageLocation}
                 onChange={(e) => setFormData({ ...formData, storageLocation: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: 冰箱 A 层 2"
               />
             </div>
@@ -843,6 +853,7 @@ function AddTubeForm({ onClose, onSubmit, groups }: any) {
                 type="text"
                 value={formData.storageCondition}
                 onChange={(e) => setFormData({ ...formData, storageCondition: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: -20°C"
               />
             </div>
@@ -926,7 +937,7 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
     <div className={styles.modal}>
       <div className={styles.modalContentWide}>
         <h2 className={styles.modalTitle}>试剂详情</h2>
-        
+
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.formRow}>
             <div className={styles.formGroup}>
@@ -935,6 +946,7 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: E1, DNA Sample A"
                 autoFocus
               />
@@ -960,26 +972,28 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
               <input
                 type="number"
                 value={formData.isInfinite ? '' : formData.totalVolume}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
+                onChange={(e) => setFormData({
+                  ...formData,
                   totalVolume: Number(e.target.value)
                 })}
+                onFocus={selectOnFocus}
                 min="0"
                 step="0.1"
                 disabled={formData.isInfinite}
                 placeholder={formData.isInfinite ? '∞ 无限' : ''}
               />
             </div>
-            
+
             <div className={styles.formGroup}>
               <label>剩余体积</label>
               <input
                 type="number"
                 value={formData.isInfinite ? '' : formData.remainingVolume}
-                onChange={(e) => setFormData({ 
-                  ...formData, 
+                onChange={(e) => setFormData({
+                  ...formData,
                   remainingVolume: Number(e.target.value)
                 })}
+                onFocus={selectOnFocus}
                 min="0"
                 step="0.1"
                 disabled={formData.isInfinite}
@@ -1059,6 +1073,7 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                     )
                     setFormData({ ...formData, substances: newSubs })
                   }}
+                  onFocus={selectOnFocus}
                   placeholder="物质名称"
                 />
                 <input
@@ -1070,6 +1085,7 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                     )
                     setFormData({ ...formData, substances: newSubs })
                   }}
+                  onFocus={selectOnFocus}
                   placeholder="浓度"
                   min="0"
                   step="0.01"
@@ -1121,26 +1137,29 @@ function TubeDetailModal({ tube, onClose, onSave, groups }: any) {
                 type="text"
                 value={formData.storageLocation}
                 onChange={(e) => setFormData({ ...formData, storageLocation: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: 冰箱 A 层 2"
               />
             </div>
-            
+
             <div className={styles.formGroup}>
               <label>存储条件</label>
               <input
                 type="text"
                 value={formData.storageCondition}
                 onChange={(e) => setFormData({ ...formData, storageCondition: e.target.value })}
+                onFocus={selectOnFocus}
                 placeholder="如: -20°C"
               />
             </div>
           </div>
-          
+
           <div className={styles.formGroup}>
             <label>备注</label>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onFocus={selectOnFocus}
               placeholder="其他备注信息..."
               rows={3}
             />

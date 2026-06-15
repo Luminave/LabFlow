@@ -30,6 +30,9 @@ import styles from './ExperimentPage.module.css'
 const nodeTypes: NodeTypes = { tube: TubeNode }
 const edgeTypes: EdgeTypes = { transfer: TransferEdge }
 
+// 聚焦时自动选中全部文本，方便快速替换
+const selectOnFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.target.select()
+
 export default function ExperimentPage() {
   const navigate = useNavigate()
   const { language } = useI18nStore()
@@ -1654,6 +1657,7 @@ export default function ExperimentPage() {
               placeholder={language === 'zh' ? '输入新工程名称...' : 'Enter new project name...'}
               value={saveAsName}
               onChange={(e) => setSaveAsName(e.target.value)}
+              onFocus={selectOnFocus}
               autoFocus
             />
             <div className={styles.formActions}>
@@ -1741,6 +1745,7 @@ export default function ExperimentPage() {
                     type="number"
                     value={editFormData.targetVolume}
                     onChange={(e) => setEditFormData({ ...editFormData, targetVolume: Number(e.target.value) })}
+                    onFocus={selectOnFocus}
                     min="0"
                     step="0.1"
                     disabled={isReadOnly}
@@ -1764,6 +1769,7 @@ export default function ExperimentPage() {
                     type="text"
                     value={editFormData.name}
                     onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    onFocus={selectOnFocus}
                     disabled={editingTube.type === 'source' || isReadOnly}
                   />
                 </div>
@@ -1775,6 +1781,7 @@ export default function ExperimentPage() {
                       type="number"
                       value={editFormData.targetVolume}
                       onChange={(e) => setEditFormData({ ...editFormData, targetVolume: Number(e.target.value) })}
+                      onFocus={selectOnFocus}
                       min="0"
                       step="0.1"
                       disabled={editingTube.type === 'source' || isReadOnly}
@@ -1805,27 +1812,32 @@ export default function ExperimentPage() {
                               type="text"
                               value={sub.name}
                               onChange={(e) => {
-                                const newSubs = [...editFormData.substances]
-                                newSubs[i].name = e.target.value
+                                const newSubs = editFormData.substances.map((s, idx) =>
+                                  idx === i ? { ...s, name: e.target.value } : s
+                                )
                                 setEditFormData({ ...editFormData, substances: newSubs })
                               }}
+                              onFocus={selectOnFocus}
                               placeholder={t('tubeDetail.substanceName', language)}
                             />
                             <input
                               type="number"
                               value={sub.concentration || ''}
                               onChange={(e) => {
-                                const newSubs = [...editFormData.substances]
-                                newSubs[i].concentration = Number(e.target.value)
+                                const newSubs = editFormData.substances.map((s, idx) =>
+                                  idx === i ? { ...s, concentration: Number(e.target.value) } : s
+                                )
                                 setEditFormData({ ...editFormData, substances: newSubs })
                               }}
+                              onFocus={selectOnFocus}
                               placeholder={t('tubeDetail.concentration', language)}
                             />
                             <select
                               value={sub.concentrationUnit}
                               onChange={(e) => {
-                                const newSubs = [...editFormData.substances]
-                                newSubs[i].concentrationUnit = e.target.value as any
+                                const newSubs = editFormData.substances.map((s, idx) =>
+                                  idx === i ? { ...s, concentrationUnit: e.target.value as any } : s
+                                )
                                 setEditFormData({ ...editFormData, substances: newSubs })
                               }}
                             >
@@ -1897,6 +1909,7 @@ export default function ExperimentPage() {
                           className={styles.formInput}
                           value={editFormData.configOrder}
                           onChange={(e) => setEditFormData({ ...editFormData, configOrder: e.target.value })}
+                          onFocus={selectOnFocus}
                           placeholder={language === 'zh' ? '正整数,用于讲述者排序' : 'Positive integer for narrator ordering'}
                           min="1"
                           step="1"
@@ -1915,6 +1928,7 @@ export default function ExperimentPage() {
                           className={styles.formInput}
                           value={editFormData.tubeNumber}
                           onChange={(e) => setEditFormData({ ...editFormData, tubeNumber: e.target.value })}
+                          onFocus={selectOnFocus}
                           placeholder="#1 (max 5 chars)"
                           maxLength={5}
                         />
