@@ -121,12 +121,11 @@ export const useSubstanceColorStore = create<SubstanceColorState>((set, get) => 
   },
 
   setColor: async (name, color, bgColor) => {
-    set(state => {
-      const newColors = new Map(state.colors)
-      newColors.set(name, { name, color, bgColor })
-      saveColorsToStorage(newColors)
-      return { colors: newColors }
-    })
+    const newColors = new Map(get().colors)
+    newColors.set(name, { name, color, bgColor })
+    set({ colors: newColors })
+    // 异步保存，不阻塞 UI
+    await saveColorsToStorage(newColors)
   },
 
   removeColor: async (name) => {
@@ -136,12 +135,11 @@ export const useSubstanceColorStore = create<SubstanceColorState>((set, get) => 
       addDeletedDefaultColor(name)
     }
 
-    set(state => {
-      const newColors = new Map(state.colors)
-      newColors.delete(name)
-      saveColorsToStorage(newColors)
-      return { colors: newColors }
-    })
+    const newColors = new Map(get().colors)
+    newColors.delete(name)
+    set({ colors: newColors })
+    // 异步保存，不阻塞 UI
+    await saveColorsToStorage(newColors)
   },
 
   resetDefaultColors: async () => {

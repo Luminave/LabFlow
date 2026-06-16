@@ -138,17 +138,44 @@ async function ensureDb() {
   }
 }
 
+// 防抖保存 - 避免频繁写入磁盘
+let saveTimer: NodeJS.Timeout | null = null
+let isSaving = false
+
 function saveDatabase() {
-  if (db) {
-    const data = db.export()
-    const buffer = Buffer.from(data)
-    const dbPath = getDbPath()
-    const dbDir = path.dirname(dbPath)
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true })
-    }
-    fs.writeFileSync(dbPath, buffer)
+  if (!db) return
+
+  // 如果已经在保存中，跳过
+  if (isSaving) return
+
+  // 清除之前的定时器
+  if (saveTimer) {
+    clearTimeout(saveTimer)
   }
+
+  // 使用防抖，100ms 内的多次保存只执行一次
+  saveTimer = setTimeout(() => {
+    isSaving = true
+    try {
+      const data = db.export()
+      const buffer = Buffer.from(data)
+      const dbPath = getDbPath()
+      const dbDir = path.dirname(dbPath)
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true })
+      }
+      // 使用异步写入，不阻塞主线程
+      fs.writeFile(dbPath, buffer, (err) => {
+        if (err) {
+          console.error('[saveDatabase] Failed to write:', err)
+        }
+        isSaving = false
+      })
+    } catch (e) {
+      console.error('[saveDatabase] Failed to export:', e)
+      isSaving = false
+    }
+  }, 100)
 }
 
 function createTables() {
@@ -674,6 +701,7 @@ ipcMain.handle('db:deleteSubstanceColor', async (_, name: string) => {
 ipcMain.handle('db:saveSubstanceColors', async (_, colors: any[]) => {
   await ensureDb()
   try {
+    db.run('BEGIN TRANSACTION')
     db.run('DELETE FROM substance_colors')
     for (const color of colors) {
       db.run(
@@ -681,9 +709,11 @@ ipcMain.handle('db:saveSubstanceColors', async (_, colors: any[]) => {
         [color.name, color.color, color.bgColor]
       )
     }
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    db.run('ROLLBACK')
     console.error('[db:saveSubstanceColors] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
