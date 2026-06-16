@@ -48,15 +48,25 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       if (window.electronAPI) {
         // 从 SQLite 加载
         const groups = await window.electronAPI.getGroups()
-        set({ groups })
+        // 验证数据格式
+        const validGroups = Array.isArray(groups) ? groups.filter(g => g && g.id && g.name) : []
+        set({ groups: validGroups })
       } else {
         // 降级到 localStorage
         const data = localStorage.getItem('labflow_groups')
-        const groups = data ? JSON.parse(data) : []
+        let groups: TubeGroup[] = []
+        try {
+          groups = data ? JSON.parse(data) : []
+          if (!Array.isArray(groups)) groups = []
+        } catch {
+          console.warn('[loadGroups] Failed to parse localStorage data')
+          groups = []
+        }
         set({ groups })
       }
     } catch (e) {
       console.error('Failed to load groups:', e)
+      set({ groups: [] })
     }
   },
 

@@ -237,29 +237,62 @@ function sanitizeTube(tube: any): Tube {
 }
 
 // 数据库记录转换
+// 安全解析 JSON，处理双重序列化的情况
+function safeParseJsonArray(jsonStr: string | null | undefined, defaultValue: any[] = []): any[] {
+  if (!jsonStr) return defaultValue
+  try {
+    let parsed = JSON.parse(jsonStr)
+    // 处理双重序列化：如果解析结果是字符串，再解析一次
+    if (typeof parsed === 'string') {
+      parsed = JSON.parse(parsed)
+    }
+    return Array.isArray(parsed) ? parsed : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
 function dbToExperiment(record: any): Experiment {
-  const tubes = JSON.parse(record.tubes || '[]').map(sanitizeTube)
-  const initialStateTubes = record.initial_state_tubes
-    ? JSON.parse(record.initial_state_tubes).map(sanitizeTube)
-    : undefined
-  const endStateTubes = record.end_state_tubes
-    ? JSON.parse(record.end_state_tubes).map(sanitizeTube)
-    : undefined
-  const warehouseSnapshot = record.warehouse_snapshot
-    ? JSON.parse(record.warehouse_snapshot).map(sanitizeTube)
-    : undefined
+  const tubes = safeParseJsonArray(record.tubes).map(sanitizeTube)
+
+  let initialStateTubes: any[] | undefined
+  try {
+    const parsed = safeParseJsonArray(record.initial_state_tubes)
+    initialStateTubes = parsed.length > 0 ? parsed.map(sanitizeTube) : undefined
+  } catch {
+    initialStateTubes = undefined
+  }
+
+  let endStateTubes: any[] | undefined
+  try {
+    const parsed = safeParseJsonArray(record.end_state_tubes)
+    endStateTubes = parsed.length > 0 ? parsed.map(sanitizeTube) : undefined
+  } catch {
+    endStateTubes = undefined
+  }
+
+  let warehouseSnapshot: any[] | undefined
+  try {
+    const parsed = safeParseJsonArray(record.warehouse_snapshot)
+    warehouseSnapshot = parsed.length > 0 ? parsed.map(sanitizeTube) : undefined
+  } catch {
+    warehouseSnapshot = undefined
+  }
+
+  const tubePositions = safeParseJsonArray(record.tube_positions)
+  const connections = safeParseJsonArray(record.connections)
 
   return {
     id: record.id,
-    name: record.name,
+    name: record.name || '未命名实验',
     description: record.description || undefined,
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
+    createdAt: record.created_at || new Date().toISOString(),
+    updatedAt: record.updated_at || new Date().toISOString(),
     completedAt: record.completed_at || undefined,
-    status: record.status,
+    status: record.status || 'draft',
     tubes,
-    tubePositions: JSON.parse(record.tube_positions || '[]'),
-    connections: JSON.parse(record.connections || '[]'),
+    tubePositions,
+    connections,
     warehouseSnapshot,
     initialStateTubes,
     endStateTubes,
@@ -276,12 +309,12 @@ function experimentToDb(exp: Experiment): any {
     updated_at: exp.updatedAt,
     completed_at: exp.completedAt || null,
     status: exp.status,
-    tubes: JSON.stringify(exp.tubes),
-    tube_positions: JSON.stringify(exp.tubePositions || []),
-    connections: JSON.stringify(exp.connections),
-    warehouse_snapshot: exp.warehouseSnapshot ? JSON.stringify(exp.warehouseSnapshot) : null,
-    initial_state_tubes: exp.initialStateTubes ? JSON.stringify(exp.initialStateTubes) : null,
-    end_state_tubes: exp.endStateTubes ? JSON.stringify(exp.endStateTubes) : null,
+    tubes: exp.tubes, // 主进程会做 JSON.stringify，这里传原始数组
+    tube_positions: exp.tubePositions || [], // 主进程会做 JSON.stringify
+    connections: exp.connections, // 主进程会做 JSON.stringify
+    warehouse_snapshot: exp.warehouseSnapshot || null,
+    initial_state_tubes: exp.initialStateTubes || null,
+    end_state_tubes: exp.endStateTubes || null,
     is_waste: exp.isWaste ? 1 : 0
   }
 }
@@ -292,13 +325,18 @@ async function loadHistories(): Promise<Map<string, TubeHistory>> {
     if (window.electronAPI) {
       // 从 SQLite 加载
       const histories = await window.electronAPI.getTubeHistories()
-      return new Map(histories.map((h: TubeHistory) => [h.tubeId, h]))
+      // 验证数据完整性
+      const validHistories = histories.filter((h: any) => h && h.tubeId && Array.isArray(h.records))
+      return new Map(validHistories.map((h: TubeHistory) => [h.tubeId, h]))
     } else {
       // 降级到 localStorage
       const data = localStorage.getItem(TUBE_HISTORIES_KEY)
       if (data) {
         const arr = JSON.parse(data)
-        return new Map(arr.map((h: TubeHistory) => [h.tubeId, h]))
+        if (Array.isArray(arr)) {
+          const validHistories = arr.filter((h: any) => h && h.tubeId && Array.isArray(h.records))
+          return new Map(validHistories.map((h: TubeHistory) => [h.tubeId, h]))
+        }
       }
     }
   } catch (e) {
@@ -436,7 +474,7 @@ async function saveWarehouseTubes(tubes: Tube[]) {
           totalVolumeUnit: tube.totalVolumeUnit,
           remainingVolume: tube.remainingVolume,
           remainingVolumeUnit: tube.remainingVolumeUnit,
-          substances: JSON.stringify(tube.substances),
+          substances: tube.substances, // 主进程会做 JSON.stringify，这里传原始数组
           updatedAt: tube.updatedAt,
           status: tube.status
         })
@@ -1201,12 +1239,12 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           totalVolumeUnit: tube.totalVolumeUnit,
           remainingVolume: tube.remainingVolume,
           remainingVolumeUnit: tube.remainingVolumeUnit,
-          substances: JSON.stringify(tube.substances),
+          substances: tube.substances, // 主进程会做 JSON.stringify，这里传原始数组
           updatedAt: tube.updatedAt,
           status: tube.status
         })
       }
-      
+
       // 添加新试管
       for (const tube of tubesToAdd) {
         console.log('[completeExperiment] Adding tube:', tube.id, tube.name, tube.remainingVolume)
@@ -1218,7 +1256,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           totalVolumeUnit: tube.totalVolumeUnit,
           remainingVolume: tube.remainingVolume,
           remainingVolumeUnit: tube.remainingVolumeUnit,
-          substances: JSON.stringify(tube.substances),
+          substances: tube.substances, // 主进程会做 JSON.stringify，这里传原始数组
           createdAt: tube.createdAt,
           updatedAt: tube.updatedAt,
           status: tube.status
@@ -1525,30 +1563,39 @@ export async function getTubeHistory(tubeId: string) {
 
 export async function getAllTubeHistories() {
   const histories = await loadHistories()
-  
+
   // 过滤掉无效的历史记录
   const validHistories = new Map<string, TubeHistory>()
-  
+
   histories.forEach((history, tubeId) => {
-    // 必须有 records 数组且不为空
-    if (history.records && history.records.length > 0) {
-      // 过滤掉无效的记录
-      const validRecords = history.records.filter(r => {
-        if (r.action === 'created') return true
-        if (r.action === 'transfer_in' || r.action === 'transfer_out') {
-          // 必须有有效的转移体积
-          return r.transferVolume !== undefined && r.transferVolume > 0
+    try {
+      // 必须有 records 数组且不为空
+      if (history.records && Array.isArray(history.records) && history.records.length > 0) {
+        // 过滤掉无效的记录
+        const validRecords = history.records.filter(r => {
+          if (!r || !r.action) return false
+          if (r.action === 'created') return true
+          if (r.action === 'transfer_in' || r.action === 'transfer_out') {
+            // 必须有有效的转移体积
+            return r.transferVolume !== undefined && r.transferVolume > 0
+          }
+          return false
+        })
+
+        // 如果还有有效记录，更新并保留
+        if (validRecords.length > 0) {
+          history.records = validRecords
+          // 确保 currentSubstances 是数组
+          if (!Array.isArray(history.currentSubstances)) {
+            history.currentSubstances = []
+          }
+          validHistories.set(tubeId, history)
         }
-        return true
-      })
-      
-      // 如果还有有效记录，更新并保留
-      if (validRecords.length > 0) {
-        history.records = validRecords
-        validHistories.set(tubeId, history)
       }
+    } catch (e) {
+      console.warn('[getAllTubeHistories] Failed to process history for tube:', tubeId, e)
     }
   })
-  
+
   return validHistories
 }

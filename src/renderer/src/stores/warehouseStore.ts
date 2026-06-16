@@ -21,22 +21,39 @@ interface WarehouseState {
 
 // 将数据库记录转换为 Tube 对象
 function dbToTube(record: any): Tube {
+  let substances: any[] = []
+  try {
+    substances = JSON.parse(record.substances || '[]')
+    if (!Array.isArray(substances)) substances = []
+  } catch {
+    console.warn('[dbToTube] Failed to parse substances for tube:', record.id)
+    substances = []
+  }
+
+  let tags: string[] | undefined
+  try {
+    tags = record.tags ? JSON.parse(record.tags) : undefined
+    if (tags && !Array.isArray(tags)) tags = undefined
+  } catch {
+    tags = undefined
+  }
+
   return {
     id: record.id,
-    name: record.name,
-    type: record.type,
-    totalVolume: record.total_volume,
-    totalVolumeUnit: record.total_volume_unit,
-    remainingVolume: record.remaining_volume,
-    remainingVolumeUnit: record.remaining_volume_unit,
-    substances: JSON.parse(record.substances || '[]'),
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
-    status: record.status as TubeStatus,
+    name: record.name || '未命名试管',
+    type: record.type || 'source',
+    totalVolume: record.total_volume ?? 0,
+    totalVolumeUnit: record.total_volume_unit || 'μL',
+    remainingVolume: record.remaining_volume ?? 0,
+    remainingVolumeUnit: record.remaining_volume_unit || 'μL',
+    substances,
+    createdAt: record.created_at || new Date().toISOString(),
+    updatedAt: record.updated_at || new Date().toISOString(),
+    status: (record.status as TubeStatus) || 'active',
     storageLocation: record.storage_location || undefined,
     storageCondition: record.storage_condition || undefined,
     notes: record.notes || undefined,
-    tags: record.tags ? JSON.parse(record.tags) : undefined,
+    tags,
     groupId: record.group_id || undefined
   }
 }
@@ -78,12 +95,19 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       } else {
         // 降级到 localStorage（开发模式）
         const data = localStorage.getItem('labflow_tubes')
-        const tubes = data ? JSON.parse(data) : []
+        let tubes: Tube[] = []
+        try {
+          tubes = data ? JSON.parse(data) : []
+          if (!Array.isArray(tubes)) tubes = []
+        } catch {
+          console.warn('[fetchTubes] Failed to parse localStorage data')
+          tubes = []
+        }
         set({ tubes, loading: false })
       }
     } catch (error) {
       console.error('Failed to fetch tubes:', error)
-      set({ error: (error as Error).message, loading: false })
+      set({ error: (error as Error).message, loading: false, tubes: [] })
     }
   },
   

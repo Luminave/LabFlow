@@ -141,12 +141,16 @@ async function ensureDb() {
 // 防抖保存 - 避免频繁写入磁盘
 let saveTimer: NodeJS.Timeout | null = null
 let isSaving = false
+let pendingSave = false // 标记是否有待执行的保存
 
 function saveDatabase() {
   if (!db) return
 
-  // 如果已经在保存中，跳过
-  if (isSaving) return
+  // 如果正在保存中，标记需要再次保存（不丢弃）
+  if (isSaving) {
+    pendingSave = true
+    return
+  }
 
   // 清除之前的定时器
   if (saveTimer) {
@@ -155,27 +159,76 @@ function saveDatabase() {
 
   // 使用防抖，100ms 内的多次保存只执行一次
   saveTimer = setTimeout(() => {
-    isSaving = true
-    try {
-      const data = db.export()
-      const buffer = Buffer.from(data)
-      const dbPath = getDbPath()
-      const dbDir = path.dirname(dbPath)
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true })
-      }
-      // 使用异步写入，不阻塞主线程
-      fs.writeFile(dbPath, buffer, (err) => {
-        if (err) {
-          console.error('[saveDatabase] Failed to write:', err)
-        }
-        isSaving = false
-      })
-    } catch (e) {
-      console.error('[saveDatabase] Failed to export:', e)
-      isSaving = false
-    }
+    executeSave()
   }, 100)
+}
+
+function executeSave() {
+  if (!db) return
+  isSaving = true
+  pendingSave = false
+
+  try {
+    const data = db.export()
+    const buffer = Buffer.from(data)
+    const dbPath = getDbPath()
+    const dbDir = path.dirname(dbPath)
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+    }
+    // 使用异步写入，不阻塞主线程
+    fs.writeFile(dbPath, buffer, (err) => {
+      if (err) {
+        console.error('[saveDatabase] Failed to write:', err)
+      }
+      isSaving = false
+      // 如果保存期间有新的保存请求，立即执行
+      if (pendingSave) {
+        pendingSave = false
+        executeSave()
+      }
+    })
+  } catch (e) {
+    console.error('[saveDatabase] Failed to export:', e)
+    isSaving = false
+    // 如果保存期间有新的保存请求，立即执行
+    if (pendingSave) {
+      pendingSave = false
+      executeSave()
+    }
+  }
+}
+
+// 强制同步保存数据库到磁盘（用于备份导出前）
+function forceSaveDatabaseSync() {
+  if (!db) return
+
+  // 清除防抖定时器
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  // 等待正在进行的异步保存完成
+  // 由于 fs.writeFile 是异步的，我们需要直接同步写入
+  try {
+    const data = db.export()
+    const buffer = Buffer.from(data)
+    const dbPath = getDbPath()
+    const dbDir = path.dirname(dbPath)
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true })
+    }
+    // 使用同步写入，确保数据立即写入磁盘
+    fs.writeFileSync(dbPath, buffer)
+    isSaving = false
+    pendingSave = false
+    console.log('[forceSaveDatabaseSync] Database saved synchronously')
+  } catch (e) {
+    console.error('[forceSaveDatabaseSync] Failed:', e)
+    isSaving = false
+    pendingSave = false
+  }
 }
 
 function createTables() {
@@ -431,20 +484,28 @@ ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
   await ensureDb()
   const existing = queryOne('SELECT id FROM experiments WHERE id = ?', [exp.id])
 
+  // 确保所有 JSON 字段都正确序列化
+  const tubesJson = JSON.stringify(exp.tubes || [])
+  const tubePositionsJson = JSON.stringify(exp.tube_positions || [])
+  const connectionsJson = JSON.stringify(exp.connections || [])
+  const warehouseSnapshotJson = exp.warehouse_snapshot ? JSON.stringify(exp.warehouse_snapshot) : null
+  const initialStateTubesJson = exp.initial_state_tubes ? JSON.stringify(exp.initial_state_tubes) : null
+  const endStateTubesJson = exp.end_state_tubes ? JSON.stringify(exp.end_state_tubes) : null
+
   if (existing) {
     db.run(
       `UPDATE experiments SET name = ?, description = ?, updated_at = ?, completed_at = ?, status = ?, tubes = ?, tube_positions = ?, connections = ?, warehouse_snapshot = ?, initial_state_tubes = ?, end_state_tubes = ?, is_waste = ? WHERE id = ?`,
       [exp.name, exp.description || null, exp.updated_at, exp.completed_at || null, exp.status,
-       JSON.stringify(exp.tubes), JSON.stringify(exp.tube_positions || []), JSON.stringify(exp.connections),
-       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null,
+       tubesJson, tubePositionsJson, connectionsJson,
+       warehouseSnapshotJson, initialStateTubesJson, endStateTubesJson,
        exp.is_waste ? 1 : 0, exp.id]
     )
   } else {
     db.run(
       `INSERT INTO experiments (id, name, description, created_at, updated_at, completed_at, status, tubes, tube_positions, connections, warehouse_snapshot, initial_state_tubes, end_state_tubes, is_waste) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [exp.id, exp.name, exp.description || null, exp.created_at, exp.updated_at, exp.completed_at || null, exp.status,
-       JSON.stringify(exp.tubes), JSON.stringify(exp.tube_positions || []), JSON.stringify(exp.connections),
-       exp.warehouse_snapshot || null, exp.initial_state_tubes || null, exp.end_state_tubes || null,
+       tubesJson, tubePositionsJson, connectionsJson,
+       warehouseSnapshotJson, initialStateTubesJson, endStateTubesJson,
        exp.is_waste ? 1 : 0]
     )
   }
@@ -454,10 +515,22 @@ ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
 
 ipcMain.handle('db:deleteExperiment', async (_, id: string) => {
   await ensureDb()
-  db.run('DELETE FROM tube_usage_records WHERE experiment_id = ?', [id])
-  db.run('DELETE FROM experiments WHERE id = ?', [id])
-  saveDatabase()
-  return { success: true }
+  try {
+    db.run('BEGIN TRANSACTION')
+    db.run('DELETE FROM tube_usage_records WHERE experiment_id = ?', [id])
+    db.run('DELETE FROM experiments WHERE id = ?', [id])
+    db.run('COMMIT')
+    saveDatabase()
+    return { success: true }
+  } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:deleteExperiment] Rollback failed:', rollbackError)
+    }
+    console.error('[db:deleteExperiment] Failed:', error)
+    throw error
+  }
 })
 
 // 试管使用记录
@@ -480,6 +553,7 @@ ipcMain.handle('db:addTubeUsage', async (_, record: any) => {
 ipcMain.handle('db:clearAllData', async () => {
   try {
     await ensureDb()
+    db.run('BEGIN TRANSACTION')
     db.run('DELETE FROM tube_history_records')
     db.run('DELETE FROM tube_histories')
     db.run('DELETE FROM tube_usage_records')
@@ -487,9 +561,15 @@ ipcMain.handle('db:clearAllData', async () => {
     db.run('DELETE FROM tubes')
     db.run('DELETE FROM groups')
     db.run('DELETE FROM substance_colors')
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:clearAllData] Rollback failed:', rollbackError)
+    }
     console.error('Failed to clear database:', error)
     return { success: false, error: (error as Error).message }
   }
@@ -541,6 +621,9 @@ ipcMain.handle('db:getTubeHistories', async () => {
 ipcMain.handle('db:saveTubeHistory', async (_, history: any) => {
   await ensureDb()
   try {
+    // 使用事务确保原子性
+    db.run('BEGIN TRANSACTION')
+
     // 保存主记录
     db.run(
       `INSERT OR REPLACE INTO tube_histories (tube_id, tube_name, tube_type, current_volume, current_volume_unit, current_substances) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -558,9 +641,15 @@ ipcMain.handle('db:saveTubeHistory', async (_, history: any) => {
       )
     }
 
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:saveTubeHistory] Rollback failed:', rollbackError)
+    }
     console.error('[db:saveTubeHistory] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
@@ -569,11 +658,18 @@ ipcMain.handle('db:saveTubeHistory', async (_, history: any) => {
 ipcMain.handle('db:deleteTubeHistory', async (_, tubeId: string) => {
   await ensureDb()
   try {
+    db.run('BEGIN TRANSACTION')
     db.run('DELETE FROM tube_history_records WHERE tube_id = ?', [tubeId])
     db.run('DELETE FROM tube_histories WHERE tube_id = ?', [tubeId])
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:deleteTubeHistory] Rollback failed:', rollbackError)
+    }
     console.error('[db:deleteTubeHistory] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
@@ -583,6 +679,9 @@ ipcMain.handle('db:deleteTubeHistory', async (_, tubeId: string) => {
 ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
   await ensureDb()
   try {
+    // 使用事务确保原子性：要么全部成功，要么全部回滚
+    db.run('BEGIN TRANSACTION')
+
     // 清空旧数据
     db.run('DELETE FROM tube_history_records')
     db.run('DELETE FROM tube_histories')
@@ -602,9 +701,16 @@ ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
       }
     }
 
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    // 回滚事务，恢复到操作前的状态
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:saveTubeHistories] Rollback failed:', rollbackError)
+    }
     console.error('[db:saveTubeHistories] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
@@ -648,6 +754,7 @@ ipcMain.handle('db:deleteGroup', async (_, id: string) => {
 ipcMain.handle('db:saveGroups', async (_, groups: any[]) => {
   await ensureDb()
   try {
+    db.run('BEGIN TRANSACTION')
     db.run('DELETE FROM groups')
     for (const group of groups) {
       db.run(
@@ -655,9 +762,15 @@ ipcMain.handle('db:saveGroups', async (_, groups: any[]) => {
         [group.id, group.name, group.color, group.notes || '', group.hidden ? 1 : 0, group.createdAt]
       )
     }
+    db.run('COMMIT')
     saveDatabase()
     return { success: true }
   } catch (error) {
+    try {
+      db.run('ROLLBACK')
+    } catch (rollbackError) {
+      console.error('[db:saveGroups] Rollback failed:', rollbackError)
+    }
     console.error('[db:saveGroups] Failed:', error)
     return { success: false, error: (error as Error).message }
   }
@@ -782,6 +895,10 @@ function calculateDbStats(): { tubes: number; experiments: number; histories: nu
 async function performSnapshot(localStorageData?: Record<string, string | null>): Promise<SnapshotInfo | null> {
   try {
     await ensureDb()
+
+    // 强制保存数据库到磁盘（防抖可能导致数据未写入）
+    forceSaveDatabaseSync()
+
     const backupDir = getBackupDir()
     const now = new Date()
     const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -914,6 +1031,9 @@ ipcMain.handle('backup:export', async (_, localStorageData: Record<string, strin
     if (dialogResult.canceled || !dialogResult.filePath) {
       return { success: false, canceled: true }
     }
+
+    // 强制保存数据库到磁盘（防抖可能导致数据未写入）
+    forceSaveDatabaseSync()
 
     // 读取数据库文件
     const dbPath = getDbPath()
