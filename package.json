@@ -1,6 +1,6 @@
 {
   "name": "labflow",
-  "version": "0.2.5",
+  "version": "0.2.10",
   "description": "A visual laboratory reagent management and experiment workflow simulator",
   "main": "dist-electron/main.js",
   "author": {
@@ -58,22 +58,47 @@
       "node_modules/sql.js/dist/sql-wasm.wasm"
     ],
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Science"
     },
     "win": {
       "icon": "D:/project/LabFlow/build/icon.ico",
       "target": [
-        {"target": "nsis", "arch": ["x64"]},
-        {"target": "portable", "arch": ["x64"]}
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "signAndEditExecutable": false
     },
     "afterPack": "./scripts/afterPack.js",
     "mac": {
       "target": [
-        {"target": "dmg", "arch": ["x64", "arm64"]},
-        {"target": "zip", "arch": ["x64", "arm64"]}
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ],
       "category": "public.app-category.science"
     },

@@ -18,6 +18,9 @@ interface SubstanceColorState {
   // 删除成分颜色
   removeColor: (name: string) => Promise<void>
 
+  // 重置默认颜色
+  resetDefaultColors: () => Promise<void>
+
   // 获取所有颜色配置
   getAllColors: () => SubstanceColor[]
 
@@ -35,11 +38,38 @@ const defaultColors = [
   { name: 'RNA', color: '#1e293b', bgColor: '#fdba74' },
 ]
 
+// 获取已删除的默认颜色列表
+function getDeletedDefaultColors(): string[] {
+  try {
+    const data = localStorage.getItem('labflow_deleted_default_colors')
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+// 记录删除的默认颜色
+function addDeletedDefaultColor(name: string) {
+  const deleted = getDeletedDefaultColors()
+  if (!deleted.includes(name)) {
+    deleted.push(name)
+    localStorage.setItem('labflow_deleted_default_colors', JSON.stringify(deleted))
+  }
+}
+
+// 重置删除记录（用于重置默认颜色）
+function resetDeletedDefaultColors() {
+  localStorage.removeItem('labflow_deleted_default_colors')
+}
+
 async function loadColorsFromStorage(): Promise<Map<string, SubstanceColor>> {
   const colors = new Map<string, SubstanceColor>()
+  const deletedDefaults = getDeletedDefaultColors()
 
-  // 先加载默认颜色
-  defaultColors.forEach(c => colors.set(c.name, c))
+  // 先加载默认颜色（排除已删除的）
+  defaultColors
+    .filter(c => !deletedDefaults.includes(c.name))
+    .forEach(c => colors.set(c.name, c))
 
   try {
     if (window.electronAPI) {
@@ -63,21 +93,20 @@ async function loadColorsFromStorage(): Promise<Map<string, SubstanceColor>> {
 
 async function saveColorsToStorage(colors: Map<string, SubstanceColor>) {
   try {
-    // 只保存用户自定义的颜色（排除默认颜色）
-    const customColors = Array.from(colors.values()).filter(
-      c => !defaultColors.some(d => d.name === c.name && d.bgColor === c.bgColor)
-    )
+    // 保存所有颜色（包括默认颜色的修改版本）
+    // 这样用户修改默认颜色后也能正确保存
+    const allColors = Array.from(colors.values())
 
     if (window.electronAPI) {
       // 保存到 SQLite
-      await window.electronAPI.saveSubstanceColors(customColors.map(c => ({
+      await window.electronAPI.saveSubstanceColors(allColors.map(c => ({
         name: c.name,
         color: c.color,
         bgColor: c.bgColor
       })))
     } else {
       // 降级到 localStorage
-      localStorage.setItem('labflow_substance_colors', JSON.stringify(customColors))
+      localStorage.setItem('labflow_substance_colors', JSON.stringify(allColors))
     }
   } catch (e) {
     console.error('Failed to save substance colors:', e)
@@ -101,12 +130,30 @@ export const useSubstanceColorStore = create<SubstanceColorState>((set, get) => 
   },
 
   removeColor: async (name) => {
+    // 如果删除的是默认颜色，记录到 localStorage
+    const isDefault = defaultColors.some(d => d.name === name)
+    if (isDefault) {
+      addDeletedDefaultColor(name)
+    }
+
     set(state => {
       const newColors = new Map(state.colors)
       newColors.delete(name)
       saveColorsToStorage(newColors)
       return { colors: newColors }
     })
+  },
+
+  resetDefaultColors: async () => {
+    // 清除删除记录
+    resetDeletedDefaultColors()
+
+    // 重新加载颜色
+    const colors = await loadColorsFromStorage()
+    set({ colors })
+
+    // 保存到数据库
+    await saveColorsToStorage(colors)
   },
 
   getAllColors: () => {

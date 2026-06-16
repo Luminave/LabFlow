@@ -1,7 +1,9 @@
 .container {
   padding: 24px;
+  width: 100%;
   max-width: 1000px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .header {
@@ -28,6 +30,7 @@
   display: flex;
   flex-direction: column;
   gap: 32px;
+  width: 100%;
 }
 
 .addSection {
@@ -130,11 +133,37 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 20px;
+  min-height: 200px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.colorList h3 {
-  margin: 0 0 16px 0;
+.colorListHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.colorListHeader h3 {
+  margin: 0;
   font-size: 16px;
+  color: #1e293b;
+}
+
+.resetBtn {
+  padding: 6px 12px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.resetBtn:hover {
+  background: #e2e8f0;
   color: #1e293b;
 }
 

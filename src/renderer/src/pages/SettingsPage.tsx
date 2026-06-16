@@ -5,7 +5,7 @@ import { t } from '../i18n/translations'
 import styles from './SettingsPage.module.css'
 
 export default function SettingsPage() {
-  const { colors, setColor, removeColor, loadColors } = useSubstanceColorStore()
+  const { colors, setColor, removeColor, resetDefaultColors, loadColors } = useSubstanceColorStore()
   const { language } = useI18nStore()
   const [newSubstance, setNewSubstance] = useState('')
   const [newColor, setNewColor] = useState('#1e293b')
@@ -135,8 +135,20 @@ export default function SettingsPage() {
         
         {/* 已配置的颜色列表 */}
         <div className={styles.colorList}>
-          <h3>{language === 'zh' ? '已配置的颜色' : 'Configured Colors'} ({colorList.length})</h3>
-          
+          <div className={styles.colorListHeader}>
+            <h3>{language === 'zh' ? '已配置的颜色' : 'Configured Colors'} ({colorList.length})</h3>
+            <button
+              className={styles.resetBtn}
+              onClick={() => {
+                if (confirm(language === 'zh' ? '确定要重置默认颜色吗？\n\n这将恢复 E1、E2、E3、E4、DNA、RNA 的默认配色。' : 'Reset default colors?\n\nThis will restore default colors for E1, E2, E3, E4, DNA, RNA.')) {
+                  resetDefaultColors()
+                }
+              }}
+            >
+              {language === 'zh' ? '重置默认颜色' : 'Reset Defaults'}
+            </button>
+          </div>
+
           {colorList.length === 0 ? (
             <p className={styles.empty}>{language === 'zh' ? '暂无颜色配置' : 'No color configurations'}</p>
           ) : (
