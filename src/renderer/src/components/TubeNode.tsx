@@ -129,14 +129,16 @@ function TubeNode({ data, selected }: NodeProps) {
     setInlineValue('')
   }, [])
 
-  // 输入框键盘事件
+  // 输入框键盘事件 - 只对 Enter/Escape 阻止冒泡，其他键不阻止（让输入正常工作）
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      e.stopPropagation()
       saveEdit()
     } else if (e.key === 'Escape') {
+      e.stopPropagation()
       cancelEdit()
     }
-    e.stopPropagation()
+    // 其他按键（普通输入字符）不调用 stopPropagation，让 ReactFlow 等正常处理
   }, [saveEdit, cancelEdit])
 
   // 渲染可编辑字段:编辑态显示输入框,否则显示可点击文本
@@ -156,6 +158,7 @@ function TubeNode({ data, selected }: NodeProps) {
           onChange={(e) => setInlineValue(e.target.value)}
           onBlur={saveEdit}
           onKeyDown={handleKeyDown}
+          onMouseDown={(e) => e.stopPropagation()}
           autoFocus
           onFocus={(e) => e.target.select()}
           {...extraProps}
@@ -288,6 +291,7 @@ function TubeNode({ data, selected }: NodeProps) {
                         onChange={(e) => setInlineValue(e.target.value)}
                         onBlur={saveEdit}
                         onKeyDown={handleKeyDown}
+                        onMouseDown={(e) => e.stopPropagation()}
                         autoFocus
                         onFocus={(e) => e.target.select()}
                         min="0"

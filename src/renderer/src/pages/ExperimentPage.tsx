@@ -934,7 +934,12 @@ export default function ExperimentPage() {
   // 执行自动计算
   // 核心计算函数 - 参数化版本(模态框编辑和内联编辑共用)
   const calculateForTube = (tube: Tube, formData: { targetVolume: number; substances: Substance[]; selectedBuffer: string }, silent: boolean = false) => {
-    const incomingConns = connections.filter(c => c.toTubeId === tube.id)
+    // 从 store 获取最新数据，避免闭包中的旧数据
+    const freshState = useExperimentStore.getState()
+    const freshConnections = freshState.connections
+    const freshCurrentTubes = freshState.currentTubes
+
+    const incomingConns = freshConnections.filter(c => c.toTubeId === tube.id)
     if (incomingConns.length === 0) {
       if (!silent) alert('请先从源试管连线到此试管')
       return false
@@ -952,7 +957,7 @@ export default function ExperimentPage() {
 
       let foundSource = false
       for (const conn of incomingConns) {
-        const sourceTube = currentTubes.find(t => t.id === conn.fromTubeId)
+        const sourceTube = freshCurrentTubes.find(t => t.id === conn.fromTubeId)
         if (!sourceTube || sourceTube.type === 'buffer') continue
 
         const sourceSub = sourceTube.substances.find(s => s.name === targetSub.name)
@@ -1009,9 +1014,9 @@ export default function ExperimentPage() {
 
     // 处理缓冲液连接
     // 先查找所有现有的缓冲液连接
-    const existingBufferConns = connections.filter(c =>
+    const existingBufferConns = freshConnections.filter(c =>
       c.toTubeId === tube.id &&
-      currentTubes.find(t => t.id === c.fromTubeId)?.type === 'buffer'
+      freshCurrentTubes.find(t => t.id === c.fromTubeId)?.type === 'buffer'
     )
 
     // 计算需要的缓冲液体积
@@ -1141,9 +1146,14 @@ export default function ExperimentPage() {
   const handleInlineUpdate = (tubeId: string, updates: Partial<Tube>, shouldCalculate?: boolean) => {
     if (isReadOnly) return
 
+    // 从 store 获取最新数据，避免闭包中的旧数据
+    const freshState = useExperimentStore.getState()
+    const freshCurrentTubes = freshState.currentTubes
+    const freshConnections = freshState.connections
+
     // 管号同步名称:如果启用 syncTubeName 且更新了管号,自动同步名称
     if (syncTubeName && updates.tubeNumber !== undefined) {
-      const tube = currentTubes.find(t => t.id === tubeId)
+      const tube = freshCurrentTubes.find(t => t.id === tubeId)
       if (tube && tube.type === 'intermediate') {
         updates.name = `${experimentDate}-${updates.tubeNumber}`
       }
@@ -1154,7 +1164,7 @@ export default function ExperimentPage() {
 
     // 如果需要计算,构造 formData 并调用计算
     if (shouldCalculate) {
-      const tube = currentTubes.find(t => t.id === tubeId)
+      const tube = freshCurrentTubes.find(t => t.id === tubeId)
       if (tube) {
         const mergedTube = { ...tube, ...updates }
         const formData = {
@@ -1164,7 +1174,7 @@ export default function ExperimentPage() {
         }
         // 有物质且有连线时才计算
         if (formData.substances.length > 0) {
-          const incomingConns = connections.filter(c => c.toTubeId === tubeId)
+          const incomingConns = freshConnections.filter(c => c.toTubeId === tubeId)
           if (incomingConns.length > 0) {
             calculateForTube(mergedTube, formData, true)
           }
@@ -1592,6 +1602,8 @@ export default function ExperimentPage() {
             onEdgeDoubleClick={onEdgeDoubleClick}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            deleteKeyCode={null}
+            selectionKeyCode={null}
             fitView
             snapToGrid
             snapGrid={[15, 15]}

@@ -12,12 +12,19 @@ interface LayoutProps {
 const GITHUB_REPO_URL = 'https://github.com/Luminave/LabFlow'
 
 /**
- * 检查是否有活跃的拖拽操作
- * 通过检查是否有 TransferEdge 组件正在拖拽来判断
+ * 拖拽状态管理
+ * _isDraggingActive: 是否有活跃的拖拽操作
+ * _dragStartTime: 拖拽开始时间，用于超时自动重置
  */
 let _isDraggingActive = false
+let _dragStartTime = 0
+const DRAG_TIMEOUT = 10000 // 10秒超时自动重置
+
 export function setDraggingActive(active: boolean) {
   _isDraggingActive = active
+  if (active) {
+    _dragStartTime = Date.now()
+  }
 }
 
 /**
@@ -25,8 +32,15 @@ export function setDraggingActive(active: boolean) {
  * 用于防止拖拽等操作中断后 body 样式卡死
  */
 function restoreBodyInteraction() {
-  // 如果有活跃的拖拽操作，不恢复
-  if (_isDraggingActive) return
+  // 如果有活跃的拖拽操作，检查是否超时
+  if (_isDraggingActive) {
+    // 超过10秒的拖拽视为异常，强制重置
+    if (Date.now() - _dragStartTime > DRAG_TIMEOUT) {
+      _isDraggingActive = false
+    } else {
+      return
+    }
+  }
 
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
