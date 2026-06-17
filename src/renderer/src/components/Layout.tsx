@@ -12,19 +12,25 @@ interface LayoutProps {
 const GITHUB_REPO_URL = 'https://github.com/Luminave/LabFlow'
 
 /**
+ * 检查是否有活跃的拖拽操作
+ * 通过检查是否有 TransferEdge 组件正在拖拽来判断
+ */
+let _isDraggingActive = false
+export function setDraggingActive(active: boolean) {
+  _isDraggingActive = active
+}
+
+/**
  * 恢复 document.body 的交互样式
  * 用于防止拖拽等操作中断后 body 样式卡死
  */
 function restoreBodyInteraction() {
-  // 只在 body 上没有活跃拖拽时恢复
-  // 通过检查 cursor 判断是否在拖拽状态
-  const cursor = document.body.style.cursor
-  if (cursor === 'grabbing' || cursor === 'move') {
-    document.body.style.cursor = ''
-  }
-  if (document.body.style.userSelect === 'none') {
-    document.body.style.userSelect = ''
-  }
+  // 如果有活跃的拖拽操作，不恢复
+  if (_isDraggingActive) return
+
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  document.body.classList.remove('dragging')
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -59,6 +65,12 @@ export default function Layout({ children }: LayoutProps) {
       }
     }
 
+    // 定时安全检查：每 3 秒检查一次 body 样式是否卡死
+    // 这是最后的防线，防止所有其他恢复机制都失效的情况
+    const safetyInterval = setInterval(() => {
+      restoreBodyInteraction()
+    }, 3000)
+
     window.addEventListener('mouseup', handleGlobalMouseUp)
     window.addEventListener('blur', handleWindowBlur)
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -69,6 +81,7 @@ export default function Layout({ children }: LayoutProps) {
       window.removeEventListener('blur', handleWindowBlur)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('keydown', handleKeyDown)
+      clearInterval(safetyInterval)
     }
   }, [])
 

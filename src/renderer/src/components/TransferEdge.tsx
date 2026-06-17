@@ -1,5 +1,6 @@
-import { FC, useState, useCallback, useRef } from 'react'
+import { FC, useState, useCallback, useRef, useEffect } from 'react'
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer, useReactFlow } from '@xyflow/react'
+import { setDraggingActive } from './Layout'
 
 interface TransferEdgeData {
   volume: number
@@ -85,6 +86,17 @@ const TransferEdge: FC<EdgeProps> = ({
   const mouseStartRef = useRef<{x: number, y: number} | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
 
+  // 组件卸载时强制恢复 body 样式（防止拖拽中断导致 body 样式卡死）
+  useEffect(() => {
+    return () => {
+      restoreBodyStyle()
+      setDraggingActive(false)
+      if (cleanupRef.current) {
+        cleanupRef.current()
+      }
+    }
+  }, [])
+
   // 用 getBezierPath 获取与渲染完全一致的曲线路径
   const [edgePath] = getBezierPath({
     sourceX,
@@ -123,6 +135,7 @@ const TransferEdge: FC<EdgeProps> = ({
       // 立即设置 body 样式
       document.body.style.cursor = 'grabbing'
       document.body.style.userSelect = 'none'
+      setDraggingActive(true)
 
       const flowContainer = document.querySelector('.react-flow') as HTMLElement
       if (!flowContainer) {
@@ -145,6 +158,7 @@ const TransferEdge: FC<EdgeProps> = ({
         if (cleaned) return // 防止重复清理
         cleaned = true
         restoreBodyStyle()
+        setDraggingActive(false)
         setIsDragging(false)
         mouseStartRef.current = null
         window.removeEventListener('mousemove', handleMouseMove)
