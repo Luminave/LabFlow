@@ -1,4 +1,4 @@
-import { FC, useState, useCallback, useRef, useEffect } from 'react'
+import { FC, useState, useCallback, useRef } from 'react'
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer, useReactFlow } from '@xyflow/react'
 
 interface TransferEdgeData {
@@ -53,6 +53,16 @@ function bezierPoint(
 }
 
 /**
+ * 恢复 document.body 的样式（安全函数，任何时候都可以调用）
+ */
+function restoreBodyStyle() {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  // 同时清除可能被 React Flow 添加的 drag 状态
+  document.body.classList.remove('dragging')
+}
+
+/**
  * 自定义移液连接线
  * - 体积数字显示在曲线上
  * - 数字可以通过拖动沿曲线移动
@@ -73,6 +83,7 @@ const TransferEdge: FC<EdgeProps> = ({
   const edgeData = data as unknown as TransferEdgeData
   const [isDragging, setIsDragging] = useState(false)
   const mouseStartRef = useRef<{x: number, y: number} | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
 
   // 用 getBezierPath 获取与渲染完全一致的曲线路径
   const [edgePath] = getBezierPath({
@@ -96,6 +107,11 @@ const TransferEdge: FC<EdgeProps> = ({
   const currentPos = edgeData?.labelPosition ?? 0.5
   const pt = bezierPoint(currentPos, sourceX, sourceY, c1x, c1y, c2x, c2y, targetX, targetY)
 
+  // 组件卸载时确保清理 body 样式
+  // 注意：不使用 useEffect 来管理 isDragging 的 body 样式，
+  // 而是在 mousedown 时立即设置，在 mouseup/blur/visibilitychange 时清理
+  // 这样可以避免 React 渲染周期导致的清理延迟
+
   // --- 拖动/点击 ---
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -104,8 +120,16 @@ const TransferEdge: FC<EdgeProps> = ({
       mouseStartRef.current = { x: e.clientX, y: e.clientY }
       setIsDragging(true)
 
+      // 立即设置 body 样式
+      document.body.style.cursor = 'grabbing'
+      document.body.style.userSelect = 'none'
+
       const flowContainer = document.querySelector('.react-flow') as HTMLElement
-      if (!flowContainer) return
+      if (!flowContainer) {
+        restoreBodyStyle()
+        setIsDragging(false)
+        return
+      }
 
       // 拖动时固定使用当前控制点（拖动过程中 path 不会变）
       const curParsed = parseCubicBezier(edgePath)
@@ -115,6 +139,23 @@ const TransferEdge: FC<EdgeProps> = ({
       const dc2y = curParsed?.c2y ?? targetY
 
       let hasMoved = false
+      let cleaned = false
+
+      const cleanup = () => {
+        if (cleaned) return // 防止重复清理
+        cleaned = true
+        restoreBodyStyle()
+        setIsDragging(false)
+        mouseStartRef.current = null
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
+        window.removeEventListener('blur', handleBlur)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        cleanupRef.current = null
+      }
+
+      // 保存 cleanup 引用，以便组件卸载时可以调用
+      cleanupRef.current = cleanup
 
       const handleMouseMove = (ev: MouseEvent) => {
         // 检测是否实际移动了
@@ -167,36 +208,32 @@ const TransferEdge: FC<EdgeProps> = ({
       }
 
       const handleMouseUp = () => {
-        setIsDragging(false)
         // 如果没有移动，视为点击
         if (!hasMoved && edgeData?.onEdgeClick) {
           edgeData.onEdgeClick(id, edgeData.volume, edgeData.volumeUnit)
         }
-        mouseStartRef.current = null
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
+        cleanup()
+      }
+
+      // 窗口失焦时也要清理（防止拖拽过程中切窗口导致卡死）
+      const handleBlur = () => {
+        cleanup()
+      }
+
+      // 页面不可见时也要清理（如切换标签页）
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          cleanup()
+        }
       }
 
       window.addEventListener('mousemove', handleMouseMove)
       window.addEventListener('mouseup', handleMouseUp)
+      window.addEventListener('blur', handleBlur)
+      document.addEventListener('visibilitychange', handleVisibilityChange)
     },
     [id, edgeData, reactFlowInstance, sourceX, sourceY, targetX, targetY, edgePath, currentPos]
   )
-
-  // 拖动时禁止画布操作
-  useEffect(() => {
-    if (isDragging) {
-      document.body.style.cursor = 'grabbing'
-      document.body.style.userSelect = 'none'
-    } else {
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-    return () => {
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isDragging])
 
   const labelText = `${Number((edgeData?.volume ?? 0).toFixed(3))} ${edgeData?.volumeUnit ?? 'μL'}`
 

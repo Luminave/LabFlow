@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
@@ -11,9 +11,67 @@ interface LayoutProps {
 // GitHub 仓库地址
 const GITHUB_REPO_URL = 'https://github.com/Luminave/LabFlow'
 
+/**
+ * 恢复 document.body 的交互样式
+ * 用于防止拖拽等操作中断后 body 样式卡死
+ */
+function restoreBodyInteraction() {
+  // 只在 body 上没有活跃拖拽时恢复
+  // 通过检查 cursor 判断是否在拖拽状态
+  const cursor = document.body.style.cursor
+  if (cursor === 'grabbing' || cursor === 'move') {
+    document.body.style.cursor = ''
+  }
+  if (document.body.style.userSelect === 'none') {
+    document.body.style.userSelect = ''
+  }
+}
+
 export default function Layout({ children }: LayoutProps) {
   const { language, toggleLanguage } = useI18nStore()
-  
+
+  // 全局安全机制：防止 body 样式卡死导致无法输入
+  useEffect(() => {
+    // 鼠标松开时恢复（最常见的情况：拖拽结束）
+    const handleGlobalMouseUp = () => {
+      // 延迟一帧恢复，让组件自己的清理逻辑先执行
+      requestAnimationFrame(() => {
+        restoreBodyInteraction()
+      })
+    }
+
+    // 窗口失焦时恢复（切窗口、最小化等）
+    const handleWindowBlur = () => {
+      restoreBodyInteraction()
+    }
+
+    // 页面不可见时恢复（切换标签页等）
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        restoreBodyInteraction()
+      }
+    }
+
+    // 键盘 ESC 时恢复（用户主动取消操作）
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        restoreBodyInteraction()
+      }
+    }
+
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    window.addEventListener('blur', handleWindowBlur)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+      window.removeEventListener('blur', handleWindowBlur)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
+
   return (
     <div className={styles.container}>
       <aside className={styles.sidebar}>
