@@ -54,12 +54,13 @@ function bezierPoint(
 }
 
 /**
- * 恢复 document.body 的样式（安全函数，任何时候都可以调用）
+ * 恢复 document.body 的交互样式（安全函数，任何时候都可以调用）
+ * 使用 classList 而非 style 直接操作，避免样式卡死
  */
 function restoreBodyStyle() {
+  document.body.classList.remove('edge-dragging')
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
-  // 同时清除可能被 React Flow 添加的 drag 状态
   document.body.classList.remove('dragging')
 }
 
@@ -132,9 +133,8 @@ const TransferEdge: FC<EdgeProps> = ({
       mouseStartRef.current = { x: e.clientX, y: e.clientY }
       setIsDragging(true)
 
-      // 立即设置 body 样式
-      document.body.style.cursor = 'grabbing'
-      document.body.style.userSelect = 'none'
+      // 立即设置 body 样式（使用 CSS 类，比直接操作 style 更安全）
+      document.body.classList.add('edge-dragging')
       setDraggingActive(true)
 
       const flowContainer = document.querySelector('.react-flow') as HTMLElement
@@ -164,12 +164,22 @@ const TransferEdge: FC<EdgeProps> = ({
         window.removeEventListener('mousemove', handleMouseMove)
         window.removeEventListener('mouseup', handleMouseUp)
         window.removeEventListener('blur', handleBlur)
+        window.removeEventListener('mousedown', handleGlobalMouseDown)
         document.removeEventListener('visibilitychange', handleVisibilityChange)
+        if (dragSafetyTimer) clearTimeout(dragSafetyTimer)
         cleanupRef.current = null
       }
 
       // 保存 cleanup 引用，以便组件卸载时可以调用
       cleanupRef.current = cleanup
+
+      // 安全超时：5 秒后强制清理（防止任何原因导致的 cleanup 丢失）
+      const dragSafetyTimer = window.setTimeout(() => {
+        if (!cleaned) {
+          console.warn('[TransferEdge] 拖拽安全超时，强制清理 body 样式')
+          cleanup()
+        }
+      }, 5000)
 
       const handleMouseMove = (ev: MouseEvent) => {
         // 检测是否实际移动了
@@ -241,9 +251,19 @@ const TransferEdge: FC<EdgeProps> = ({
         }
       }
 
+      // 全局 mousedown 时清理（用户在其他地方点击 = 拖拽结束）
+      const handleGlobalMouseDown = (ev: MouseEvent) => {
+        // 排除当前标签自身的 mousedown（它已经在处理中了）
+        const target = ev.target as HTMLElement
+        if (!target?.closest('.transfer-edge-label')) {
+          cleanup()
+        }
+      }
+
       window.addEventListener('mousemove', handleMouseMove)
       window.addEventListener('mouseup', handleMouseUp)
       window.addEventListener('blur', handleBlur)
+      window.addEventListener('mousedown', handleGlobalMouseDown, true) // 捕获阶段，尽早拦截
       document.addEventListener('visibilitychange', handleVisibilityChange)
     },
     [id, edgeData, reactFlowInstance, sourceX, sourceY, targetX, targetY, edgePath, currentPos]

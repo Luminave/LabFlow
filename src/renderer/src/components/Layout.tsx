@@ -18,7 +18,7 @@ const GITHUB_REPO_URL = 'https://github.com/Luminave/LabFlow'
  */
 let _isDraggingActive = false
 let _dragStartTime = 0
-const DRAG_TIMEOUT = 10000 // 10秒超时自动重置
+const DRAG_TIMEOUT = 5000 // 5秒超时自动重置（从10秒缩短）
 
 export function setDraggingActive(active: boolean) {
   _isDraggingActive = active
@@ -30,11 +30,11 @@ export function setDraggingActive(active: boolean) {
 /**
  * 恢复 document.body 的交互样式
  * 用于防止拖拽等操作中断后 body 样式卡死
+ * 双重保障：同时检查 _isDraggingActive 标志和 body 上的实际 class
  */
 function restoreBodyInteraction() {
   // 如果有活跃的拖拽操作，检查是否超时
   if (_isDraggingActive) {
-    // 超过10秒的拖拽视为异常，强制重置
     if (Date.now() - _dragStartTime > DRAG_TIMEOUT) {
       _isDraggingActive = false
     } else {
@@ -42,6 +42,8 @@ function restoreBodyInteraction() {
     }
   }
 
+  // 清理所有可能的拖拽样式残留
+  document.body.classList.remove('edge-dragging')
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
   document.body.classList.remove('dragging')
@@ -82,6 +84,14 @@ export default function Layout({ children }: LayoutProps) {
     // 定时安全检查：每 3 秒检查一次 body 样式是否卡死
     // 这是最后的防线，防止所有其他恢复机制都失效的情况
     const safetyInterval = setInterval(() => {
+      // 直接检查 body 上是否有拖拽 class 残留（不依赖 _isDraggingActive 标志）
+      // 这是对标志和样式不一致情况的兜底
+      if (document.body.classList.contains('edge-dragging') && !_isDraggingActive) {
+        // body 有拖拽 class 但标志已清除 → 样式残留，直接清理
+        document.body.classList.remove('edge-dragging')
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
       restoreBodyInteraction()
     }, 3000)
 

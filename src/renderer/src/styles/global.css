@@ -67,6 +67,13 @@ body { min-height: 100vh; overflow: hidden; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
 button { cursor: pointer; border: none; background: none; font-family: inherit; font-size: inherit; }
+
+/* 拖拽连接线标签时的全局样式（通过 JS 添加/移除 class，比直接操作 style 更安全） */
+body.edge-dragging {
+  cursor: grabbing !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
 input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* 深色模式下的输入框和选择框 */
