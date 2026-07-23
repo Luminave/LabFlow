@@ -1,6 +1,6 @@
 {
   "name": "labflow",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "A visual laboratory reagent management and experiment workflow simulator",
   "main": "dist-electron/main.js",
   "author": {

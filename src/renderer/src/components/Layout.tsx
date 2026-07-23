@@ -209,7 +209,7 @@ export default function Layout({ children }: LayoutProps) {
           <button className={styles.langBtn} onClick={toggleLanguage}>
             {t('language.switch', language)}
           </button>
-          <span className={styles.version}>v0.2.16</span>
+          <span className={styles.version}>v0.2.17</span>
         </div>
       </aside>
       
