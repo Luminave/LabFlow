@@ -601,6 +601,14 @@ export default function ExperimentPage() {
     tubeNumber: ''
   })
 
+  // 表单错误提示（替代 alert，避免阻塞 JS 线程导致输入框卡死）
+  const [formError, setFormError] = useState<string | null>(null)
+
+  // 用户修改表单时自动清除错误提示
+  useEffect(() => {
+    if (formError) setFormError(null)
+  }, [editFormData.name, editFormData.targetVolume, editFormData.configOrder, editFormData.tubeNumber])
+
   // 同步 currentTubes 到 nodes
   useEffect(() => {
     if (currentTubes.length > 0) {
@@ -822,6 +830,7 @@ export default function ExperimentPage() {
     }
 
     setEditingTube(tube)
+    setFormError(null)
     setEditFormData({
       name: tube.name,
       targetVolume: tube.totalVolume,
@@ -841,7 +850,7 @@ export default function ExperimentPage() {
     // 检查名称唯一性
     const trimmedName = editFormData.name.trim()
     if (!trimmedName) {
-      alert('试管名称不能为空')
+      setFormError(language === 'zh' ? '试管名称不能为空' : 'Tube name cannot be empty')
       return
     }
 
@@ -849,7 +858,7 @@ export default function ExperimentPage() {
       t.id !== editingTube.id && t.name.toLowerCase() === trimmedName.toLowerCase()
     )
     if (duplicateName) {
-      alert(`${language === 'zh' ? '试管名称' : 'Tube name'} "${trimmedName}" ${language === 'zh' ? '已存在,请使用其他名称' : 'already exists, please use another name'}`)
+      setFormError(`${language === 'zh' ? '试管名称' : 'Tube name'} "${trimmedName}" ${language === 'zh' ? '已存在，请使用其他名称' : 'already exists, please use another name'}`)
       return
     }
 
@@ -882,21 +891,21 @@ export default function ExperimentPage() {
 
     const configOrderNum = editFormData.configOrder ? parseInt(editFormData.configOrder, 10) : undefined
     if (editFormData.configOrder && (isNaN(configOrderNum!) || configOrderNum! <= 0)) {
-      alert('配置序号必须是正整数')
+      setFormError(language === 'zh' ? '配置序号必须是正整数' : 'Config order must be a positive integer')
       return
     }
 
     // 处理管号:去掉首尾空格,如果非空且不以#开头则自动加#
     let tubeNumber = editFormData.tubeNumber.trim()
     if (tubeNumber.length > 5) {
-      alert('管号最多5个字符')
+      setFormError(language === 'zh' ? '管号最多5个字符' : 'Tube number max 5 characters')
       return
     }
     if (tubeNumber && !tubeNumber.startsWith('#')) {
       tubeNumber = '#' + tubeNumber
     }
     if (tubeNumber && tubeNumber.length > 5) {
-      alert('管号最多5个字符(含#)')
+      setFormError(language === 'zh' ? '管号最多5个字符(含#)' : 'Tube number max 5 characters (including #)')
       return
     }
 
@@ -1991,6 +2000,12 @@ export default function ExperimentPage() {
                   </>
                 )}
               </>
+            )}
+
+            {formError && (
+              <div className={styles.formError} onClick={() => setFormError(null)}>
+                ⚠️ {formError}
+              </div>
             )}
 
             <div className={styles.formActions}>
