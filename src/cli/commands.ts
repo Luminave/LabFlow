@@ -598,6 +598,14 @@ export function commandComplete(args: ParsedArgs): CommandResult {
   }
 
   const { snapshot, warnings: warehouseWarnings } = loadWarehouse(root)
+  // 基底必须是仓库全集：仓库.yml 不存在 / 读不出试剂时不能当「空仓库」结算，
+  // 否则写出来的 仓库.yml 只剩本实验新入仓的那几根（和界面那次同类：基底不是全量）
+  if (snapshot.reagents.length === 0) {
+    return {
+      code: EXIT_FINDINGS,
+      text: `拒绝结算：${WAREHOUSE_FILENAME} 里没有读到任何试剂（${warehouseWarnings[0] || '文件为空'}），先把仓库放回来`
+    }
+  }
   const now = new Date().toISOString()
   const settled = settleExperiment(
     { experiment: project.experiment, warehouse: snapshot.reagents },

@@ -14,9 +14,10 @@ import {
 import { Experiment, Tube, TransferConnection, TubePosition, Substance, VolumeUnit } from '@shared/types'
 import { roundVolume } from '@shared/utils/calculations'
 import { computeEndState } from '@/core/endState'
-import { settleExperiment } from '@/core/settle'
+import { mergeWarehouseBase, settleExperiment } from '@/core/settle'
 import { useWarehouseStore } from './warehouseStore'
-import { requestWarehouseWrite } from '../utils/warehouseWriteQueue'
+import { flushWarehouseWrite } from '../utils/warehouseWriteQueue'
+import { loadWarehouseFile, restoreWarehouseContent } from '../utils/warehouseSource'
 import { blendConcentration, mergeSubstancePlaceholders } from '@/core/mix'
 
 const CURRENT_EXPERIMENT_KEY = 'labflow_current_experiment'
@@ -25,10 +26,16 @@ const EXPERIMENTS_KEY = 'labflow_experiments' // 实验记录的 localStorage ke
 
 // ==================== 自动保存防抖机制 ====================
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+/**
+ * 有改动还没真正落盘（自动保存失败时为 true）。
+ * 2026-11 修：以前只看 2 秒防抖窗口，写盘失败后窗口一关就当成「已保存」，
+ * 热加载接着把画布改动覆盖掉。
+ */
+let autoSaveDirty = false
 
-/** 有没还没落盘的改动（自动保存的防抖窗口里就算有）——热加载判断用 */
+/** 有没还没落盘的改动（防抖窗口里、或上次自动保存失败）——热加载判断用 */
 export function hasPendingAutoSave(): boolean {
-  return autoSaveTimer !== null
+  return autoSaveTimer !== null || autoSaveDirty
 }
 const AUTO_SAVE_DELAY = 2000 // 2秒防抖
 
@@ -38,11 +45,15 @@ const AUTO_SAVE_DELAY = 2000 // 2秒防抖
  */
 function debouncedAutoSave(get: () => ExperimentState) {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveDirty = true
   autoSaveTimer = setTimeout(async () => {
     autoSaveTimer = null
     const state = get()
-    if (!state.currentExperiment) return
-    
+    if (!state.currentExperiment) {
+      autoSaveDirty = false
+      return
+    }
+
     const experiment: Experiment = {
       ...state.currentExperiment,
       tubes: state.currentTubes,
@@ -50,13 +61,14 @@ function debouncedAutoSave(get: () => ExperimentState) {
       connections: state.connections,
       updatedAt: new Date().toISOString()
     }
-    
+
     try {
       if (window.electronAPI) {
         await persistExperiment(experiment)
         console.log('[AutoSave] Experiment saved to database, id:', experiment.id)
       }
-      
+      autoSaveDirty = false
+
       // 同步更新 experiments 数组
       const experiments = get().experiments
       const existingIndex = experiments.findIndex(e => e.id === experiment.id)
@@ -66,12 +78,15 @@ function debouncedAutoSave(get: () => ExperimentState) {
       } else {
         newExperiments = [...experiments, experiment]
       }
-      
+
       saveExperimentsToStorage(newExperiments)
       // 注意：不调用 set() 避免循环触发，只更新 experiments 数组
       // currentExperiment/currentTubes 等已经在各操作中更新过了
     } catch (e) {
+      // 落盘失败：改动仍然只在界面上——保持 dirty，热加载绝不覆盖，并且明确告诉人
+      autoSaveDirty = true
       console.error('[AutoSave] Failed to save experiment to DB:', e)
+      notifyAutoSaveFailed((e as Error)?.message || '未知错误')
       // DB 失败时仍然保存到 localStorage
       const experiments = get().experiments
       const existingIndex = experiments.findIndex(ee => ee.id === experiment.id)
@@ -86,6 +101,35 @@ function debouncedAutoSave(get: () => ExperimentState) {
     }
   }, AUTO_SAVE_DELAY)
 }
+
+/** 自动保存失败的提示（轻提示即可；模块顶部不能引 React，用事件解耦） */
+function notifyAutoSaveFailed(reason: string): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  window.dispatchEvent(
+    new CustomEvent('labflow:global-toast', {
+      detail: { text: `自动保存失败：${reason}；改动还在界面上（不会被热加载覆盖），请稍后手动保存` }
+    })
+  )
+}
+
+/**
+ * 试管历史保存失败的提示：**不影响试剂账**，也不能让结算被报成失败。
+ * 2026-11-23 真机事故：历史表绑定 undefined 失败 → 界面报「结束实验失败」，
+ * 实际仓库.yml / 工程.yml 都已写好。
+ */
+function notifyHistorySaveFailed(reason: string): void {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  try {
+    window.dispatchEvent(
+      new CustomEvent('labflow:global-toast', {
+        detail: { text: `实验已结束；试管历史保存失败（不影响试剂账）：${reason}` }
+      })
+    )
+  } catch {
+    // 提示发不出去也不能反过来把结算搞失败
+  }
+}
+
 
 // 试管历史记录
 interface TubeHistory {
@@ -510,16 +554,26 @@ export function getProjectFileInfo(id: string): { fileName: string; stat: Projec
   return projectFiles.get(id)
 }
 
+/**
+ * **只写工程正本（yml）**，不碰数据库。
+ * 结束实验时用它：文件要先写成功，数据库/内存才许动。
+ * 正本冲突时抛 ProjectFileConflictError，调用方决定怎么问主人。
+ */
+async function persistProjectFile(experiment: Experiment, options: { forceFile?: boolean } = {}): Promise<void> {
+  if (!isProjectFileAvailable()) return
+  const known = projectFiles.get(experiment.id)
+  // forceFile：主人在「工程文件已被外部修改」对话框里选了「用界面覆盖」
+  const saved = await saveProjectSource(experiment, options.forceFile ? null : known?.stat ?? null)
+  projectFiles.set(experiment.id, { fileName: saved.fileName, stat: saved.stat })
+}
+
 /** 先写正本（yml），再写数据库缓存；正本冲突时抛 ProjectFileConflictError，调用方决定怎么问主人 */
 async function persistExperiment(
   experiment: Experiment,
   options: { skipFile?: boolean; forceFile?: boolean } = {}
 ): Promise<void> {
-  if (!options.skipFile && isProjectFileAvailable()) {
-    const known = projectFiles.get(experiment.id)
-    // forceFile：主人在「工程文件已被外部修改」对话框里选了「用界面覆盖」
-    const saved = await saveProjectSource(experiment, options.forceFile ? null : known?.stat ?? null)
-    projectFiles.set(experiment.id, { fileName: saved.fileName, stat: saved.stat })
+  if (!options.skipFile) {
+    await persistProjectFile(experiment, { forceFile: options.forceFile })
   }
   if (window.electronAPI) {
     // 数据库继续当缓存/回退：正本写成功后再落库，正本失败时这里不会被执行到
@@ -965,6 +1019,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     const { currentExperiment, currentTubes, connections } = get()
     if (!currentExperiment) return
 
+    // 硬守卫：已经结束过的工程不许再结算一次（重复点会二次扣减仓库、凭空生成中间产物）
+    if (currentExperiment.status === 'completed') {
+      const message = '这个工程已经结束过了，不能重复结算'
+      set({ error: message })
+      throw new Error(message)
+    }
+
     const histories = await loadHistories()
     const initialStateTubes = currentTubes.map(t => ({ ...t }))
     
@@ -1100,24 +1161,112 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           fromId, undefined, conn.volume)
       }
     }
-    try {
-      await saveHistories(histories)
-    } catch (e) {
-      console.error('[completeExperiment] Failed to save tube histories:', e)
-      alert('⚠️ 试管历史记录保存失败：' + (e as Error).message + '\n\n实验数据已保存，但溯源页面可能无法显示试管记录。')
+    /**
+     * 历史记录写失败不影响结算（原行为：只提示）。
+     * 2026-11-23 修（真机：结算被历史记录拖垮）：以前这里有 alert，且若 alert 之后
+     * 任何一步抛出，界面就报「结束实验失败」——可仓库.yml、工程.yml 其实已经落地了。
+     * 现在：失败只记 warn + 一条轻提示，**绝不抛**，也绝不回滚已落地的数据。
+     */
+    const saveHistoriesOrWarn = async (): Promise<void> => {
+      try {
+        await saveHistories(histories)
+      } catch (e) {
+        console.warn('[completeExperiment] 试管历史保存失败（不影响试剂账）:', e)
+        notifyHistorySaveFailed((e as Error)?.message || '未知原因')
+      }
     }
 
+
     // 结算（core 纯函数：界面与 CLI 共用同一套规则）
-    const warehouseNow = await getWarehouseTubes()
+    //
+    // 2026-11-23 修（阻断：真机点「结束实验」被截断护栏拒写）：
+    // 结算基底必须是**仓库全集**。以前这里用 getWarehouseTubes()，它读数据库
+    // `status != 'discarded'` 的子集——39 种试剂只剩 13 种，结算结果因此把本实验
+    // 没用到的 26 种整批丢掉（日志：试剂少了 26 条…拒绝写）。
+    // 现在的口径：仓库.yml（真相）的顺序当骨架，内存里同 id 的条目覆盖，内存新增追加。
+    const warehouseFile = await loadWarehouseFile()
+    if (warehouseFile.state === 'broken') {
+      const reason = warehouseFile.error || warehouseFile.warnings[0] || '内容无法解析'
+      const message = `仓库正本（仓库.yml）读不懂（${reason}），不敢结算：请先修好仓库文件`
+      set({ error: message })
+      throw new Error(message)
+    }
+    const warehouseFromFile = warehouseFile.state === 'ok' && warehouseFile.snapshot ? warehouseFile.snapshot.reagents : []
+    let warehouseBase = mergeWarehouseBase(warehouseFromFile, useWarehouseStore.getState().tubes)
+    // 既没有文件也没有内存（首次启动的极端情况）才退回数据库
+    if (warehouseBase.length === 0) warehouseBase = await getWarehouseTubes()
+    const warehouseFileText = warehouseFile.state === 'ok' ? warehouseFile.text : undefined
+
     const settled = settleExperiment(
-      { experiment: { tubes: currentTubes, connections }, warehouse: warehouseNow },
+      { experiment: { tubes: currentTubes, connections }, warehouse: warehouseBase },
       { now: () => new Date().toISOString() }
     )
     const endStateTubes = settled.endStateTubes
 
     console.log('[completeExperiment] 结算：扣减', settled.usage.length, '条，新入仓', settled.created.length, '根，耗尽', settled.depleted.length, '根')
 
+    // 先算好结算后的工程，等两个正本都写成功再落地
+    const completedExperiment: Experiment = {
+      ...currentExperiment,
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      tubes: currentTubes,
+      tubePositions: get().tubePositions,
+      connections,
+      initialStateTubes,
+      endStateTubes
+    }
+
+    /** 任何一步失败：记下原因、提示界面，并把异常抛给调用方（内存里什么都没改） */
+    const fail = (message: string): never => {
+      set({ error: message })
+      throw new Error(message)
+    }
+
     if (window.electronAPI) {
+      // ① 先写 仓库.yml：等它**真的**写完（冲突时 warehouseSync 已重读文件并提示）
+      // warehouseBefore 用拼好的全集：结算前「真仓库」就是仓库.yml 那份，回滚也要回到它
+      const warehouseBefore = warehouseBase
+      useWarehouseStore.getState().setTubes(settled.warehouseAfter)
+      const flushed = await flushWarehouseWrite()
+      if (!flushed.ok) {
+        // 冲突时内存已被重读的文件内容替换，不再回滚；其它失败把内存恢复原样
+        if (!flushed.conflict) useWarehouseStore.getState().setTubes(warehouseBefore)
+        console.error('[completeExperiment] 仓库正本写失败：', flushed.message)
+        fail(`仓库正本没能写成（${flushed.message || '未知原因'}），本次结算没有落地：仓库和数据库都没改`)
+      }
+
+      // ② 再写工程正本；写不成就把仓库文件恢复回去，整体不落地
+      try {
+        await persistProjectFile(completedExperiment)
+      } catch (error) {
+        useWarehouseStore.getState().setTubes(warehouseBefore)
+        // 回滚要用**原文**：走护栏重写会被当成「非显式删除」拒掉，文件就停在结算后状态了
+        let restored = false
+        if (warehouseFileText !== undefined) restored = await restoreWarehouseContent(warehouseFileText)
+        if (!restored) {
+          // 拿不到原文（仓库文件本来不存在 / 没有桌面正本）→ 退回「按内存重写一遍」
+          try {
+            await flushWarehouseWrite()
+            restored = true
+          } catch (restoreError) {
+            console.error('[completeExperiment] 恢复仓库文件失败：', restoreError)
+          }
+        }
+        const reason = error instanceof ProjectFileConflictError ? '工程文件已被外部修改' : (error as Error).message
+        console.error('[completeExperiment] 工程正本写失败：', error)
+        fail(
+          restored
+            ? `工程正本没能写成（${reason}），本次结算没有落地：仓库和数据库都没改`
+            : `工程正本没能写成（${reason}），仓库文件可能还停在结算后的状态，请打开 仓库.yml 核对（数据库没改）`
+        )
+      }
+
+      // ③ 两个文件都成了，才动数据库和内存
+      useWarehouseStore.getState().setTubes(settled.warehouseAfter)
+
+      await saveHistoriesOrWarn()
+
       // 仓库里已有的试管：余量 / 状态
       for (const tube of settled.updated) {
         await window.electronAPI.updateTube({
@@ -1151,10 +1300,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         })
       }
 
-      // 结算结果回写 仓库.yml（写前有截断护栏）
-      useWarehouseStore.getState().setTubes(settled.warehouseAfter)
-      requestWarehouseWrite()
+      await window.electronAPI.saveExperiment(experimentToDb(completedExperiment))
     } else {
+      await saveHistoriesOrWarn()
       // 降级到 localStorage
       const existingTubesData = localStorage.getItem('labflow_tubes')
       const existingTubes: Tube[] = existingTubesData ? JSON.parse(existingTubesData) : []
@@ -1166,32 +1314,16 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       localStorage.setItem('labflow_tubes', JSON.stringify([...merged.values()]))
     }
 
-    // 保存实验
-    const completedExperiment: Experiment = {
-      ...currentExperiment,
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-      tubes: currentTubes,
-      tubePositions: get().tubePositions,
-      connections,
-      initialStateTubes,
-      endStateTubes
-    }
-    
-    if (window.electronAPI) {
-      await persistExperiment(completedExperiment)
-    }
-    
     localStorage.removeItem(CURRENT_EXPERIMENT_KEY)
-    
+
     const experiments = get().experiments
     const newExperiments = experiments.some(e => e.id === completedExperiment.id)
       ? experiments.map(e => e.id === completedExperiment.id ? completedExperiment : e)
       : [...experiments, completedExperiment]
-    
+
     // 同时保存到 localStorage 作为备份（和 saveCurrentExperiment 一致）
     saveExperimentsToStorage(newExperiments)
-    
+
     set({ currentExperiment: completedExperiment, currentTubes, tubePositions: get().tubePositions, experiments: newExperiments, showEndState: false })
   },
   

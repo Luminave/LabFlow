@@ -15,6 +15,14 @@
 
 import type { Tube, ValidationInput, ValidationIssue } from './schema'
 import { aggregateFlows } from './aggregate'
+import { normalizeVolume } from './units'
+
+const BASE_VOLUME_UNIT = 'μL'
+
+/** 校验一律在 µL 基准上比；参数也一律是 µL（与结算/结束状态同口径） */
+function baseVolume(value: number | undefined, unit: string | undefined): number {
+  return normalizeVolume(value || 0, unit || BASE_VOLUME_UNIT)
+}
 
 /** 校验实验，返回结构化错误列表（顺序与改动前一致） */
 export function validateExperiment(input: ValidationInput): ValidationIssue[] {
@@ -29,7 +37,9 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
 
     if (tube.type === 'source') {
       const whTube = warehouseTubes.find(t => t.id === tube.id)
-      const availableVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
+      const availableVolume = whTube
+        ? baseVolume(whTube.remainingVolume, whTube.remainingVolumeUnit)
+        : baseVolume(tube.remainingVolume, tube.remainingVolumeUnit)
       if (outVolume > availableVolume) {
         issues.push({
           code: 'volume_exceed_source',
@@ -43,11 +53,12 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
 
       const whTube = warehouseTubes.find(t => t.id === tube.id)
       if (whTube) {
-        if (outVolume > whTube.remainingVolume) {
+        const availableVolume = baseVolume(whTube.remainingVolume, whTube.remainingVolumeUnit)
+        if (outVolume > availableVolume) {
           issues.push({
             code: 'volume_exceed_intermediate_warehouse',
             tubeId: tube.id,
-            params: { outVolume, availableVolume: whTube.remainingVolume }
+            params: { outVolume, availableVolume }
           })
         }
       } else {
@@ -74,7 +85,7 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
     const hasSelectedBuffer = tube.selectedBuffer || defaultBuffer
 
     const inVolume = inMap.get(tube.id) || 0
-    const targetVolume = tube.totalVolume || 0
+    const targetVolume = baseVolume(tube.totalVolume, tube.totalVolumeUnit)
 
     if (targetVolume > inVolume && !hasBufferConnection && !hasSelectedBuffer) {
       issues.push({
@@ -118,14 +129,18 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
     if (tube.asSource) continue
 
     const incomingConns = connections.filter(c => c.toTubeId === tube.id)
-    const totalInputFromConnections = incomingConns.reduce((sum, c) => sum + (c.volume || 0), 0)
+    const totalInputFromConnections = incomingConns.reduce(
+      (sum, c) => sum + baseVolume(c.volume, (c as { volumeUnit?: string }).volumeUnit),
+      0
+    )
+    const targetVolume = baseVolume(tube.totalVolume, tube.totalVolumeUnit)
 
-    if (tube.type === 'intermediate' && tube.totalVolume > 0) {
-      if (Math.abs(totalInputFromConnections - tube.totalVolume) > 0.1) {
+    if (tube.type === 'intermediate' && targetVolume > 0) {
+      if (Math.abs(totalInputFromConnections - targetVolume) > 0.1) {
         issues.push({
           code: 'calculation_error',
           tubeId: tube.id,
-          params: { targetVolume: tube.totalVolume, inputVolume: totalInputFromConnections }
+          params: { targetVolume, inputVolume: totalInputFromConnections }
         })
       }
     }

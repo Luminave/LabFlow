@@ -81,6 +81,15 @@ interface DataRootAPI {
     fileNameOrName: string
   ) => Promise<{ ok: true; path: string; content: string; stat: DataFileStat | null } | { ok: false; reason: 'not-found' }>
   statProject: (fileNameOrName: string) => Promise<DataFileStat | null>
+  findProject: (
+    id: string
+  ) => Promise<
+    | { ok: true; path: string; fileName: string; content: string; stat: DataFileStat | null }
+    | { ok: false; reason: 'not-found' }
+  >
+  backupWarehouse: (payload: {
+    content: string
+  }) => Promise<{ ok: true; path: string; fileName: string } | { ok: false; error: string }>
   writeProject: (payload: {
     id?: string
     name: string

@@ -11,11 +11,19 @@
  * - 上样 / 废液：不进仓库
  *
  * 纯函数：不改传入数组，时间由 `options.now` 提供（不给就不写时间戳）。
+ *
+ * 2026-11-23 修（阻断：真机点「结束实验」被截断护栏拒绝）：
+ * `input.warehouse` 必须是**仓库全集**（仓库.yml 的正本内容），不是「本实验用到的试管」。
+ * 以前界面调用方把数据库 `status != 'discarded'` 的子集（39 种里只剩 13 种）当全集传进来，
+ * 结算结果就只含这 13 条，没参与的 26 种被整批丢掉 → 护栏判定「试剂少了 26 条」拒写。
+ * 现在合并规则写死在本函数里：只有本实验真的碰到（`usage` / `createdTubes`）的条目会被替换，
+ * 其余条目**原样保留（同一个对象引用、顺序不变）**，最后才追加新入仓的中间产物。
+ * 调用方若手里只有子集，先用 `mergeWarehouseBase()` 拼成全量再传进来。
  */
 
 import { computeEndState } from './endState'
 import type { Experiment, Substance, Tube, TransferConnection, VolumeUnit } from './schema'
-import { normalizeVolume, roundVolume } from './units'
+import { denormalizeVolume, normalizeVolume, roundVolume } from './units'
 
 export interface SettleOptions {
   /** 提供则给变动过的试管写 updatedAt（界面传真实时间，测试不传保证可对比） */
@@ -62,6 +70,7 @@ export interface SettleResult {
 
 export interface SettleInput {
   experiment: Pick<Experiment, 'tubes' | 'connections'>
+  /** 仓库**全集**（仓库.yml 正本那份），不是本实验用到的试管；子集请先用 mergeWarehouseBase() 拼全 */
   warehouse: Tube[]
 }
 
@@ -71,8 +80,44 @@ function volumeOf(tube: Tube): number {
   return normalizeVolume(tube.remainingVolume, tube.remainingVolumeUnit || BASE_VOLUME_UNIT)
 }
 
+/** µL 结果按目标试管自己的单位写回（先按 µL 舍入，避免 mL 管丢精度） */
+function writeBack(baseVolume: number, unit: VolumeUnit | undefined): number {
+  return roundVolume(denormalizeVolume(roundVolume(baseVolume), unit || BASE_VOLUME_UNIT))
+}
+
+/** 把一个「数值 + 单位」折成 µL */
+function toBase(value: number, unit: VolumeUnit | undefined): number {
+  return normalizeVolume(value, unit || BASE_VOLUME_UNIT)
+}
+
 function isDepleted(volume: number): boolean {
   return volume <= 0.000001
+}
+
+/**
+ * 拼一份「仓库全集」当结算基底。
+ *
+ * 为什么要它：界面内存里的试剂列表可能是子集（启动只读数据库的 `status != 'discarded'`、
+ * 溯源页又用临时列表顶替过内存），拿它当全集结算就会把没参与的试剂丢掉。
+ * 仓库.yml 是真相，所以：
+ * - 以文件那份的**顺序**为骨架；
+ * - 内存里同 id 的条目覆盖上去（内存可能是刚改过余量的那份）；
+ * - 内存里有、文件里没有的追加在后面（还没落盘的新增，不能丢）。
+ *
+ * 文件里没被覆盖的条目保持**原对象引用**，方便调用方/测试确认「真的没动」。
+ */
+export function mergeWarehouseBase(fileReagents: readonly Tube[], memoryReagents: readonly Tube[]): Tube[] {
+  const memoryById = new Map<string, Tube>()
+  for (const tube of memoryReagents) memoryById.set(tube.id, tube)
+
+  const merged: Tube[] = fileReagents.map(tube => memoryById.get(tube.id) ?? tube)
+  const known = new Set(merged.map(tube => tube.id))
+  for (const tube of memoryReagents) {
+    if (known.has(tube.id)) continue
+    merged.push(tube)
+    known.add(tube.id)
+  }
+  return merged
 }
 
 /**
@@ -101,7 +146,9 @@ export function settleExperiment(input: SettleInput, options: SettleOptions = {}
     if (endTube.type === 'sample' || endTube.type === 'waste') continue
 
     const before = warehouse.find(t => t.id === endTube.id)
-    const after = roundVolume(endTube.remainingVolume)
+    // 结算一律在 µL 基准上做：endTube.remainingVolume 是「按它自己单位」写回的，
+    // 先折回 µL 再比、再记账；写库时再按仓库那根管自己的单位换回去。
+    const after = roundVolume(volumeOf(endTube))
 
     if (before && before.type === 'buffer') {
       // 缓冲液：体积不变（当作充足），不记账、不需要回写
@@ -111,9 +158,11 @@ export function settleExperiment(input: SettleInput, options: SettleOptions = {}
       const beforeVolume = volumeOf(before)
       const next: Tube = {
         ...before,
-        remainingVolume: after,
+        remainingVolume: writeBack(after, before.remainingVolumeUnit),
         totalVolume:
-          endTube.type === 'intermediate' ? roundVolume(endTube.totalVolume) : before.totalVolume,
+          endTube.type === 'intermediate'
+            ? writeBack(toBase(endTube.totalVolume, endTube.totalVolumeUnit), before.totalVolumeUnit)
+            : before.totalVolume,
         substances: endTube.substances,
         status: isDepleted(after) ? 'depleted' : 'active'
       }
@@ -139,7 +188,7 @@ export function settleExperiment(input: SettleInput, options: SettleOptions = {}
       // 新产生的中间产物：整根入仓，保留画布上的 id
       const next: Tube = {
         ...endTube,
-        remainingVolume: after,
+        remainingVolume: writeBack(after, endTube.remainingVolumeUnit),
         totalVolume: roundVolume(endTube.totalVolume),
         status: isDepleted(after) ? 'depleted' : 'active'
       }
@@ -152,7 +201,10 @@ export function settleExperiment(input: SettleInput, options: SettleOptions = {}
     }
   }
 
+  // 以传入的仓库全集为基底逐管替换：byId 里只有「本实验真的碰到」的条目，
+  // 其余条目原样带过去（同一个引用、顺序不变、批次/时间戳都不动）。
   const warehouseAfter: Tube[] = warehouse.map(tube => byId.get(tube.id) || tube)
+  // 新入仓的中间产物追加在末尾（id 已存在就不重复追加）
   for (const newTube of createdTubes) {
     if (!warehouseAfter.some(t => t.id === newTube.id)) warehouseAfter.push(newTube)
   }

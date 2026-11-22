@@ -99,10 +99,24 @@ export function readTextFile(target: string): string | null {
 }
 
 /**
+ * 读一个工程文件里写的 `project.id`（没有就返回 null）。
+ * 工程 yml 里 id 行是 `  id: <uuid>`（project: 块内缩进 2 格），老文件可能没有这一行。
+ */
+export function projectIdInFile(target: string): string | null {
+  const text = readTextFile(target)
+  if (!text) return null
+  const match = /^\s{0,4}id:\s*(\S+)\s*$/m.exec(text)
+  return match ? match[1].replace(/^['"]|['"]$/g, '') : null
+}
+
+/**
  * 找一个工程该写到哪个文件：
  * 1. 先按 id 找（读到哪个文件里 project.id 匹配就用哪个，工程改名也不会丢文件）
  * 2. 再按工程名找（同名文件里没有 id 的老文件也认）
  * 3. 都没有 → 用工程名新开一个，重名就 `-2`、`-3`
+ *
+ * 重名判据（2026-11 修）：同名文件里写着**别的** project.id 时绝不覆盖，直接换名。
+ * `takenNames` 是调用方已知被占用的文件名（同批保存里已被别的工程认领的），也一并避开。
  */
 export function resolveProjectPath(root: string, id: string | undefined, name: string, takenNames: string[] = []): string {
   const dir = projectDir(root)
@@ -111,23 +125,41 @@ export function resolveProjectPath(root: string, id: string | undefined, name: s
   const files = fs.readdirSync(dir).filter(file => file.endsWith('.yml'))
   if (id) {
     for (const file of files) {
-      const text = readTextFile(path.join(dir, file))
-      if (!text) continue
-      const match = /^\s{0,4}id:\s*(\S+)\s*$/m.exec(text)
-      if (match && match[1].replace(/^['"]|['"]$/g, '') === id) {
+      if (projectIdInFile(path.join(dir, file)) === id) {
         return path.join(dir, file)
       }
     }
   }
 
   const base = sanitizeProjectName(name)
-  const exact = path.join(dir, `${base}.yml`)
-  if (fs.existsSync(exact) && !takenNames.includes(`${base}.yml`)) return exact
+  const taken = new Set(takenNames)
+  /** 文件能被本次工程用：里面没写 id（老文件），或者写的正是本次 id */
+  const reusable = (fileName: string): boolean => {
+    const fileId = projectIdInFile(path.join(dir, fileName))
+    // 写了 id 但不是本次的（含本次没给 id 的情况）→ 不许动，换名
+    if (fileId && fileId !== (id || '')) return false
+    return true
+  }
+
+  const exactName = `${base}.yml`
+  const exact = path.join(dir, exactName)
+  if (fs.existsSync(exact)) {
+    if (reusable(exactName)) return exact
+    // 同名但属于另一个工程：落到下面换名，不覆盖
+  } else if (!taken.has(exactName)) {
+    return exact
+  }
 
   // 重名：-2、-3 …
   for (let index = 2; index < 1000; index++) {
-    const candidate = path.join(dir, `${base}-${index}.yml`)
-    if (!fs.existsSync(candidate)) return candidate
+    const fileName = `${base}-${index}.yml`
+    const candidate = path.join(dir, fileName)
+    if (fs.existsSync(candidate)) {
+      if (reusable(fileName) && !taken.has(fileName)) return candidate
+      continue
+    }
+    if (taken.has(fileName)) continue
+    return candidate
   }
   return path.join(dir, `${base}-${Date.now()}.yml`)
 }
@@ -162,6 +194,50 @@ export function readProjectFile(root: string, fileNameOrName: string): { path: s
     }
   }
   return null
+}
+
+/** 按 project.id 找工程文件（名字改了也认）；找不到返回 null */
+export function findProjectFileById(
+  root: string,
+  id: string
+): { path: string; fileName: string; content: string; stat: FileStat } | null {
+  if (!id) return null
+  const dir = projectDir(root)
+  if (!fs.existsSync(dir)) return null
+  const files = fs.readdirSync(dir).filter(file => file.endsWith('.yml')).sort()
+  for (const file of files) {
+    const full = path.join(dir, file)
+    if (projectIdInFile(full) !== id) continue
+    const content = readTextFile(full)
+    const stat = statFile(full)
+    if (content !== null && stat) return { path: full, fileName: file, content, stat }
+  }
+  return null
+}
+
+/** 时间戳：20261123-005930（备份文件名用，稳定、可排序） */
+function backupStamp(date = new Date()): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
+/**
+ * 把读不懂的 `仓库.yml` 另存一份当证据：`仓库.broken-<时间戳>.yml`（放数据根目录，不覆盖旧的）。
+ * 不改动、不移走原文件——原文件留给人自己决定怎么救。
+ */
+export function backupBrokenWarehouse(root: string, content: string, date = new Date()): { path: string; fileName: string } {
+  const dir = root
+  fs.mkdirSync(dir, { recursive: true })
+  const stamp = backupStamp(date)
+  const base = `${WAREHOUSE_FILENAME.replace(/\.yml$/, '')}.broken-${stamp}`
+  let fileName = `${base}.yml`
+  let target = path.join(dir, fileName)
+  for (let index = 2; fs.existsSync(target) && index < 1000; index++) {
+    fileName = `${base}-${index}.yml`
+    target = path.join(dir, fileName)
+  }
+  writeFileAtomic(target, content)
+  return { path: target, fileName }
 }
 
 /** 写派生产物（SOP / PNG）到 导出/；文件名由调用方给 */

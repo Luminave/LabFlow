@@ -107,6 +107,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listProjects: () => ipcRenderer.invoke('data:list-projects'),
     readProject: (fileNameOrName: string) => ipcRenderer.invoke('data:read-project', fileNameOrName),
     statProject: (fileNameOrName: string) => ipcRenderer.invoke('data:stat-project', fileNameOrName),
+    findProject: (id: string) => ipcRenderer.invoke('data:find-project', id),
+    backupWarehouse: (payload: { content: string }) => ipcRenderer.invoke('data:backup-warehouse', payload),
     writeProject: (payload: { id?: string; name: string; content: string; expect?: { mtimeMs: number; size: number } | null }) =>
       ipcRenderer.invoke('data:write-project', payload),
     readWarehouse: () => ipcRenderer.invoke('data:read-warehouse'),

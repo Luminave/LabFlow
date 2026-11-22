@@ -14,7 +14,7 @@ import { useExperimentStore, getProjectFileInfo, hasPendingAutoSave } from '../s
 import { useWarehouseStore } from '../stores/warehouseStore'
 import { useGroupStore } from '../stores/groupStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
-import { loadWarehouseFile } from './warehouseSource'
+import { backupBrokenWarehouseFile, loadWarehouseFile } from './warehouseSource'
 import { showGlobalToast } from '../components/GlobalToast'
 
 export interface StoreFilesChangedPayload {
@@ -58,7 +58,18 @@ export function planHotReload(input: PlanInput): HotReloadPlan {
 /** 重读 仓库.yml 并静默替换内存（绝不写回文件，写回会和自己打架） */
 export async function reloadWarehouseFromFile(): Promise<boolean> {
   const loaded = await loadWarehouseFile()
-  if (!loaded) return false
+  if (loaded.state === 'broken') {
+    // 文件在、但读不懂：不覆盖内存（保留界面上/数据库里的内容），坏文件另存留证
+    const backupName = loaded.text ? await backupBrokenWarehouseFile(loaded.text) : null
+    const reason = loaded.error || loaded.warnings[0] || '内容无法解析'
+    showGlobalToast(
+      backupName
+        ? `仓库.yml 读不懂（${reason}），沿用当前内容未覆盖；原文件已备份为 ${backupName}`
+        : `仓库.yml 读不懂（${reason}），沿用当前内容未覆盖`
+    )
+    return false
+  }
+  if (loaded.state !== 'ok' || !loaded.snapshot) return false
 
   const { snapshot } = loaded
   useWarehouseStore.getState().setTubes(snapshot.reagents)

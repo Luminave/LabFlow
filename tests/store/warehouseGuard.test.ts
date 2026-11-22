@@ -25,7 +25,7 @@ describe('启动序列：文件存在时只读不写', () => {
     const applyGroups = vi.fn()
 
     const plan = await bootstrapWarehouseFile({
-      loadFile: async () => ({ snapshot: { reagents, groups: [] } }),
+      loadFile: async () => ({ state: 'ok' as const, snapshot: { reagents, groups: [] }, warnings: [] }),
       saveFile,
       currentSnapshot: () => ({ reagents: [], groups: [] }),
       applyTubes,
@@ -42,7 +42,7 @@ describe('启动序列：文件存在时只读不写', () => {
   it('文件不存在 → 才由数据库生成一次', async () => {
     const saveFile = vi.fn(async () => true)
     const plan = await bootstrapWarehouseFile({
-      loadFile: async () => null,
+      loadFile: async () => ({ state: 'missing' as const, warnings: [] }),
       saveFile,
       currentSnapshot: () => ({ reagents, groups: [] }),
       applyTubes: () => {},
@@ -57,7 +57,7 @@ describe('启动序列：文件存在时只读不写', () => {
   it('文件存在但内容为空（0 试剂 0 分组）→ 按「没有文件」处理', async () => {
     const saveFile = vi.fn(async () => true)
     const plan = await bootstrapWarehouseFile({
-      loadFile: async () => ({ snapshot: { reagents: [], groups: [] } }),
+      loadFile: async () => ({ state: 'missing' as const, text: '', warnings: [] }),
       saveFile,
       currentSnapshot: () => ({ reagents, groups: [] }),
       applyTubes: () => {},

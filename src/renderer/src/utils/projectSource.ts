@@ -127,6 +127,37 @@ export function isProjectFileAvailable(): boolean {
   return Boolean(api())
 }
 
+/** 一次读到的工程正本（按 id 或按名字命中的都归一成这个形状） */
+interface ProjectSourceRead {
+  path: string
+  content: string
+  stat: ProjectFileStat | null
+}
+
+/**
+ * 找一份工程正本：**先按工程 id 扫 工程/*.yml**（文件被改名也认），再退回按名字找。
+ * 2026-11 修：以前只按名字找，改名后就在旁边又生成一份，越攒越多。
+ */
+async function readProjectByAnyKey(fallback: Experiment): Promise<ProjectSourceRead | null> {
+  const dataRoot = api()
+  if (!dataRoot) return null
+
+  try {
+    if (fallback.id && typeof dataRoot.findProject === 'function') {
+      const byId = await dataRoot.findProject(fallback.id)
+      if (byId.ok && byId.content) return { path: byId.path, content: byId.content, stat: byId.stat }
+    }
+  } catch (error) {
+    console.warn('[Store] 按 id 找工程正本失败，退回按名字找：', error)
+  }
+
+  const byName = await dataRoot.readProject(fallback.name)
+  if (byName.ok && byName.content) {
+    return { path: byName.path, content: byName.content, stat: byName.stat }
+  }
+  return null
+}
+
 /**
  * 读一份工程正本；文件不在就由数据库记录生成一份。
  * @param fallback 数据库里的那条记录（用来补 id / 快照，并在文件缺失时作为内容来源）
@@ -135,29 +166,29 @@ export async function loadProjectSource(fallback: Experiment): Promise<ProjectSo
   const dataRoot = api()
   if (!dataRoot) return null
 
-  const read = await dataRoot.readProject(fallback.name)
-  if (read.ok && read.content) {
-    const loaded = experimentFromProjectFile(read.content, fallback)
+  const found = await readProjectByAnyKey(fallback)
+  if (found) {
+    const loaded = experimentFromProjectFile(found.content, fallback)
     const refWarnings = checkReagentRefs(loaded.experiment, await warehouseIds())
     // 源试管的余量属于仓库那份数据，工程文件只记引用
     const withVolumes = applyWarehouseVolumes(loaded.experiment, await warehouseReagents())
     return {
       experiment: withVolumes,
-      fileName: fileNameOf(read.path),
-      stat: read.stat,
+      fileName: fileNameOf(found.path),
+      stat: found.stat,
       warnings: [...loaded.warnings, ...refWarnings],
       fromFile: true
     }
   }
 
-  // 文件不存在 → 用数据库里的旧数据生成正本
+  // 文件不存在（id 和名字都找不到）→ 用数据库里的旧数据生成正本
   const content = projectFileText(fallback)
   const written = await dataRoot.writeProject({ id: fallback.id, name: fallback.name, content })
   if (!written.ok) {
     console.warn('[Store] 生成工程正本失败：', written)
     return null
   }
-  console.log(`[Store] 由 DB 生成 ${written.fileName}`)
+  console.log(`[Store] 找不到工程正本（id=${fallback.id}，名字=${fallback.name}），由 DB 生成 ${written.fileName}`)
   return {
     experiment: fallback,
     fileName: written.fileName,
@@ -204,15 +235,14 @@ export async function saveProjectSource(
 
 /** 用文件里的内容覆盖当前工程（冲突时主人选「重新载入」） */
 export async function reloadProjectSource(fallback: Experiment): Promise<ProjectSourceEntry | null> {
-  const dataRoot = api()
-  if (!dataRoot) return null
-  const read = await dataRoot.readProject(fallback.name)
-  if (!read.ok || !read.content) return null
-  const loaded = experimentFromProjectFile(read.content, fallback)
+  if (!api()) return null
+  const found = await readProjectByAnyKey(fallback)
+  if (!found) return null
+  const loaded = experimentFromProjectFile(found.content, fallback)
   return {
     experiment: applyWarehouseVolumes(loaded.experiment, await warehouseReagents()),
-    fileName: fileNameOf(read.path),
-    stat: read.stat,
+    fileName: fileNameOf(found.path),
+    stat: found.stat,
     warnings: loaded.warnings,
     fromFile: true
   }

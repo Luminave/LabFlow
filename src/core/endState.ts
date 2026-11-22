@@ -11,11 +11,16 @@
  *
  * 与 2) 的差别只在 totalVolume：本模块保留首次创建体积，2) 会把 totalVolume 改成结束体积。
  * 页面只用结果里的 remainingVolume 上色/显示，因此这个差别在界面上不可见。
+ *
+ * 单位（2026-11 修）：所有体积先归一到 µL 再算，算完按**该管自己的单位**写回。
+ * 已知缺陷：「5 mL 试剂被 100 µL 抽走就判耗尽」就是没归一化导致的，此次一并修掉。
  */
 
-import type { EndStateInput, Tube, TransferConnection } from './schema'
+import type { EndStateInput, Tube, TransferConnection, VolumeUnit } from './schema'
 import { aggregateFlows } from './aggregate'
-import { roundVolume } from './units'
+import { denormalizeVolume, normalizeVolume, roundVolume } from './units'
+
+const BASE_VOLUME_UNIT: VolumeUnit = 'μL'
 
 export interface EndStateOptions {
   /**
@@ -25,10 +30,21 @@ export interface EndStateOptions {
   now?: () => string
 }
 
+/** 把一个「数值 + 单位」折成 µL */
+function toBase(value: number, unit: VolumeUnit | undefined): number {
+  return normalizeVolume(value, unit || BASE_VOLUME_UNIT)
+}
+
+/** 把 µL 结果按目标单位写回（先按 µL 四舍五入到 3 位，再换算，避免 mL 管丢精度） */
+function writeBack(baseValue: number, unit: VolumeUnit | undefined): number {
+  const rounded = roundVolume(Math.max(0, baseValue))
+  return roundVolume(denormalizeVolume(rounded, unit || BASE_VOLUME_UNIT))
+}
+
 /**
  * 计算结束状态。
  *
- * 体积口径（与改动前一致）：
+ * 体积口径（与改动前一致，只是全部在 µL 基准上算）：
  * - 原料试管：仓库剩余体积（查不到则用画布上的 remainingVolume）− 移出体积，下限 0
  * - 缓冲液：不变
  * - 中间产物：在仓库里 → 仓库剩余体积 − 移出体积；不在仓库里 → 移入体积 − 移出体积
@@ -45,16 +61,21 @@ export function computeEndState(input: EndStateInput, opts: EndStateOptions = {}
     let endVolume: number
     if (tube.type === 'source') {
       const whTube = input.warehouseTubes.find(t => t.id === tube.id)
-      const initialVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-      endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
+      const initialVolume = whTube
+        ? toBase(whTube.remainingVolume, whTube.remainingVolumeUnit)
+        : toBase(tube.remainingVolume, tube.remainingVolumeUnit)
+      endVolume = writeBack(initialVolume - outVolume, tube.remainingVolumeUnit)
     } else if (tube.type === 'buffer') {
       endVolume = tube.remainingVolume
     } else if (tube.type === 'intermediate') {
       const whTube = input.warehouseTubes.find(t => t.id === tube.id)
       if (whTube) {
-        endVolume = roundVolume(Math.max(0, whTube.remainingVolume - outVolume))
+        endVolume = writeBack(
+          toBase(whTube.remainingVolume, whTube.remainingVolumeUnit) - outVolume,
+          tube.remainingVolumeUnit
+        )
       } else {
-        endVolume = roundVolume(Math.max(0, inVolume - outVolume))
+        endVolume = writeBack(inVolume - outVolume, tube.remainingVolumeUnit)
       }
     } else {
       endVolume = tube.remainingVolume
@@ -62,7 +83,8 @@ export function computeEndState(input: EndStateInput, opts: EndStateOptions = {}
 
     let preservedTotalVolume = tube.totalVolume
     if (tube.type === 'intermediate' && !input.warehouseTubes.find(t => t.id === tube.id)) {
-      preservedTotalVolume = inVolume > 0 ? inVolume : tube.totalVolume
+      preservedTotalVolume =
+        inVolume > 0 ? roundVolume(denormalizeVolume(roundVolume(inVolume), tube.totalVolumeUnit || BASE_VOLUME_UNIT)) : tube.totalVolume
     }
 
     const next: Tube = {

@@ -1,4 +1,13 @@
 import { classifyStoreEvent, createWriteTracker, type StoreChangePayload } from './storeWatcher'
+// 入库前兜底规范化：sql.js 不接受 undefined（见 sqlSafe.ts 顶部的事故说明）
+import {
+  normalizeTubeHistories,
+  normalizeTubeHistory,
+  normalizeTubeInsert,
+  normalizeTubeRow,
+  normalizeExperimentInsert,
+  normalizeExperimentRow
+} from './sqlSafe'
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -13,6 +22,8 @@ import {
   DEFAULT_DATA_ROOT,
   ensureDataRoot,
   exportDir,
+  backupBrokenWarehouse,
+  findProjectFileById,
   listProjectFiles,
   projectDir,
   readProjectFile,
@@ -536,10 +547,12 @@ ipcMain.handle('db:addTube', async (_, tube: any) => {
   try {
     await ensureDb()
     console.log('Adding tube:', tube)
+    // 入库前规范化：NOT NULL 列缺字段给兜底，可空列 undefined → NULL（sql.js 绑不了 undefined）
+    const row = normalizeTubeInsert(tube)
     db.run(
       `INSERT INTO tubes (id, name, type, total_volume, total_volume_unit, remaining_volume, remaining_volume_unit, substances, created_at, updated_at, status, storage_location, storage_condition, notes, tags, group_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tube.id, tube.name, tube.type, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.createdAt, tube.updatedAt, tube.status || 'active', tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.groupId || null]
+      [row.id, row.name, row.type, row.totalVolume, row.totalVolumeUnit, row.remainingVolume, row.remainingVolumeUnit, row.substances, row.createdAt, row.updatedAt, row.status, row.storageLocation, row.storageCondition, row.notes, row.tags, row.groupId]
     )
     saveDatabase()
     return tube
@@ -551,9 +564,21 @@ ipcMain.handle('db:addTube', async (_, tube: any) => {
 
 ipcMain.handle('db:updateTube', async (_, tube: any) => {
   await ensureDb()
+  const row = normalizeTubeRow(tube)
+  // NOT NULL 列用 COALESCE：缺字段时保留原值，既不抛错也不把不可空列写成 NULL；
+  // 可空列（存放位置/备注/条件/标签/分组）照常允许写成 NULL。
   db.run(
-    `UPDATE tubes SET name = ?, type = ?, total_volume = ?, total_volume_unit = ?, remaining_volume = ?, remaining_volume_unit = ?, substances = ?, updated_at = ?, status = ?, storage_location = ?, storage_condition = ?, notes = ?, tags = ?, group_id = ? WHERE id = ?`,
-    [tube.name, tube.type, tube.totalVolume, tube.totalVolumeUnit, tube.remainingVolume, tube.remainingVolumeUnit, JSON.stringify(tube.substances), tube.updatedAt, tube.status, tube.storageLocation || null, tube.storageCondition || null, tube.notes || null, JSON.stringify(tube.tags || []), tube.groupId || null, tube.id]
+    `UPDATE tubes SET
+       name = COALESCE(?, name), type = COALESCE(?, type),
+       total_volume = COALESCE(?, total_volume), total_volume_unit = COALESCE(?, total_volume_unit),
+       remaining_volume = COALESCE(?, remaining_volume), remaining_volume_unit = COALESCE(?, remaining_volume_unit),
+       substances = COALESCE(?, substances), updated_at = COALESCE(?, updated_at),
+       status = COALESCE(?, status),
+       storage_location = ?, storage_condition = ?, notes = ?, tags = ?, group_id = ?
+     WHERE id = ?`,
+    [row.name, row.type, row.totalVolume, row.totalVolumeUnit, row.remainingVolume, row.remainingVolumeUnit,
+     row.substances, row.updatedAt, row.status,
+     row.storageLocation, row.storageCondition, row.notes, row.tags, row.groupId, row.id]
   )
   saveDatabase()
   return tube
@@ -579,31 +604,26 @@ ipcMain.handle('db:getExperiment', async (_, id: string) => {
 
 ipcMain.handle('db:saveExperiment', async (_, exp: any) => {
   await ensureDb()
-  const existing = queryOne('SELECT id FROM experiments WHERE id = ?', [exp.id])
-
-  // 确保所有 JSON 字段都正确序列化
-  const tubesJson = JSON.stringify(exp.tubes || [])
-  const tubePositionsJson = JSON.stringify(exp.tube_positions || [])
-  const connectionsJson = JSON.stringify(exp.connections || [])
-  const warehouseSnapshotJson = exp.warehouse_snapshot ? JSON.stringify(exp.warehouse_snapshot) : null
-  const initialStateTubesJson = exp.initial_state_tubes ? JSON.stringify(exp.initial_state_tubes) : null
-  const endStateTubesJson = exp.end_state_tubes ? JSON.stringify(exp.end_state_tubes) : null
+  const existingRow = normalizeExperimentRow(exp)
+  const existing = queryOne('SELECT id FROM experiments WHERE id = ?', [existingRow.id])
 
   if (existing) {
+    // NOT NULL 列用 COALESCE：缺字段保留原值；可空列（描述/完成时间/快照）照常落 NULL
     db.run(
-      `UPDATE experiments SET name = ?, description = ?, updated_at = ?, completed_at = ?, status = ?, tubes = ?, tube_positions = ?, connections = ?, warehouse_snapshot = ?, initial_state_tubes = ?, end_state_tubes = ?, is_waste = ? WHERE id = ?`,
-      [exp.name, exp.description || null, exp.updated_at, exp.completed_at || null, exp.status,
-       tubesJson, tubePositionsJson, connectionsJson,
-       warehouseSnapshotJson, initialStateTubesJson, endStateTubesJson,
-       exp.is_waste ? 1 : 0, exp.id]
+      `UPDATE experiments SET name = COALESCE(?, name), description = ?, updated_at = COALESCE(?, updated_at), completed_at = ?, status = COALESCE(?, status), tubes = COALESCE(?, tubes), tube_positions = ?, connections = COALESCE(?, connections), warehouse_snapshot = ?, initial_state_tubes = ?, end_state_tubes = ?, is_waste = ? WHERE id = ?`,
+      [existingRow.name, existingRow.description, existingRow.updatedAt, existingRow.completedAt, existingRow.status,
+       existingRow.tubes, existingRow.tubePositions, existingRow.connections,
+       existingRow.warehouseSnapshot, existingRow.initialStateTubes, existingRow.endStateTubes,
+       existingRow.isWaste, existingRow.id]
     )
   } else {
+    const row = normalizeExperimentInsert(exp)
     db.run(
       `INSERT INTO experiments (id, name, description, created_at, updated_at, completed_at, status, tubes, tube_positions, connections, warehouse_snapshot, initial_state_tubes, end_state_tubes, is_waste) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [exp.id, exp.name, exp.description || null, exp.created_at, exp.updated_at, exp.completed_at || null, exp.status,
-       tubesJson, tubePositionsJson, connectionsJson,
-       warehouseSnapshotJson, initialStateTubesJson, endStateTubesJson,
-       exp.is_waste ? 1 : 0]
+      [row.id, row.name, row.description, row.createdAt, row.updatedAt, row.completedAt, row.status,
+       row.tubes, row.tubePositions, row.connections,
+       row.warehouseSnapshot, row.initialStateTubes, row.endStateTubes,
+       row.isWaste]
     )
   }
   saveDatabase()
@@ -721,20 +741,23 @@ ipcMain.handle('db:saveTubeHistory', async (_, history: any) => {
     // 使用事务确保原子性
     db.run('BEGIN TRANSACTION')
 
+    // 入库前规范化：可选项 undefined → null（sql.js 绑定 undefined 会抛错）
+    const { row, records } = normalizeTubeHistory(history)
+
     // 保存主记录
     db.run(
       `INSERT OR REPLACE INTO tube_histories (tube_id, tube_name, tube_type, current_volume, current_volume_unit, current_substances) VALUES (?, ?, ?, ?, ?, ?)`,
-      [history.tubeId, history.tubeName, history.tubeType, history.currentVolume, history.currentVolumeUnit, JSON.stringify(history.currentSubstances)]
+      [row.tubeId, row.tubeName, row.tubeType, row.currentVolume, row.currentVolumeUnit, row.currentSubstances]
     )
 
     // 删除旧的 records
-    db.run('DELETE FROM tube_history_records WHERE tube_id = ?', [history.tubeId])
+    db.run('DELETE FROM tube_history_records WHERE tube_id = ?', [row.tubeId])
 
     // 插入新的 records
-    for (const record of history.records) {
+    for (const record of records) {
       db.run(
         `INSERT INTO tube_history_records (id, tube_id, experiment_id, experiment_name, action, timestamp, volume_before, volume_after, volume_unit, substances_before, substances_after, transfer_from, transfer_to, transfer_volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [record.id, history.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, JSON.stringify(record.substancesBefore), JSON.stringify(record.substancesAfter), record.transferFrom, record.transferTo, record.transferVolume]
+        [record.id, record.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, record.substancesBefore, record.substancesAfter, record.transferFrom, record.transferTo, record.transferVolume]
       )
     }
 
@@ -783,17 +806,17 @@ ipcMain.handle('db:saveTubeHistories', async (_, histories: any[]) => {
     db.run('DELETE FROM tube_history_records')
     db.run('DELETE FROM tube_histories')
 
-    // 批量插入
-    for (const history of histories) {
+    // 批量插入（先整体规范化：可选字段 undefined → null，缺 records 当空数组）
+    for (const { row, records } of normalizeTubeHistories(histories)) {
       db.run(
         `INSERT INTO tube_histories (tube_id, tube_name, tube_type, current_volume, current_volume_unit, current_substances) VALUES (?, ?, ?, ?, ?, ?)`,
-        [history.tubeId, history.tubeName, history.tubeType, history.currentVolume, history.currentVolumeUnit, JSON.stringify(history.currentSubstances)]
+        [row.tubeId, row.tubeName, row.tubeType, row.currentVolume, row.currentVolumeUnit, row.currentSubstances]
       )
 
-      for (const record of history.records) {
+      for (const record of records) {
         db.run(
           `INSERT INTO tube_history_records (id, tube_id, experiment_id, experiment_name, action, timestamp, volume_before, volume_after, volume_unit, substances_before, substances_after, transfer_from, transfer_to, transfer_volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [record.id, history.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, JSON.stringify(record.substancesBefore), JSON.stringify(record.substancesAfter), record.transferFrom, record.transferTo, record.transferVolume]
+          [record.id, record.tubeId, record.experimentId, record.experimentName, record.action, record.timestamp, record.volumeBefore, record.volumeAfter, record.volumeUnit, record.substancesBefore, record.substancesAfter, record.transferFrom, record.transferTo, record.transferVolume]
         )
       }
     }
@@ -1848,6 +1871,27 @@ ipcMain.handle('data:stat-project', (_, fileNameOrName: string) => {
   return found ? found.stat : null
 })
 
+/** 按工程 id 找正本（工程在 LabFlow 外被改过名也认） */
+ipcMain.handle('data:find-project', (_, id: string) => {
+  const found = findProjectFileById(getDataRoot(), id)
+  if (!found) return { ok: false as const, reason: 'not-found' as const }
+  return { ok: true as const, path: found.path, fileName: found.fileName, content: found.content, stat: found.stat }
+})
+
+/** 读不懂的仓库正本另存一份留证：仓库.broken-<时间戳>.yml（不动原文件） */
+ipcMain.handle('data:backup-warehouse', (_, payload: { content: string }) => {
+  try {
+    const root = getDataRoot()
+    ensureDataRoot(root)
+    const written = backupBrokenWarehouse(root, payload.content)
+    console.log('[Store] 坏仓库文件已备份：', written.path)
+    return { ok: true as const, path: written.path, fileName: written.fileName }
+  } catch (error) {
+    console.error('[Store] 备份坏仓库文件失败：', error)
+    return { ok: false as const, error: (error as Error).message }
+  }
+})
+
 /**
  * 写工程正本。
  * `expect` 是上次读/写时的 {mtimeMs,size}；文件被人手改过就对不上 → 不覆盖，返回 conflict。
@@ -1858,7 +1902,9 @@ ipcMain.handle(
     try {
       const root = getDataRoot()
       ensureDataRoot(root)
-      const target = resolveProjectPath(root, payload.id, payload.name)
+      // 把「工程/ 里已占用的文件名」一并传进去：同名但属于别的工程时换名，不覆盖
+      const takenNames = listProjectFiles(root).map(file => file.fileName)
+      const target = resolveProjectPath(root, payload.id, payload.name, takenNames)
       const current = statFile(target)
 
       if (payload.expect && current) {

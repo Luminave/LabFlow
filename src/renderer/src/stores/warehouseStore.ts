@@ -218,7 +218,8 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     try {
       if (window.electronAPI) {
         await window.electronAPI.deleteTube(id)
-        requestWarehouseWrite()
+        // 显式删除：护栏据此放行「这次条数减少」，删除才能真落盘（否则重启会复活）
+        requestWarehouseWrite({ explicitDelete: [id] })
       } else {
         localStorage.setItem('labflow_tubes', JSON.stringify(newTubes))
       }
