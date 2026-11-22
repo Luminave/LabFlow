@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist-cli/labflow.mjs --log-level=warning",
-    "labflow": "node dist-cli/labflow.mjs"
+    "labflow": "node dist-cli/labflow.mjs",
+    "watch:probe": "node scripts/watch-probe.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.0.0",

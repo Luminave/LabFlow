@@ -19,6 +19,7 @@ import {
   readTextFile,
   resolveProjectPath,
   statFile,
+  WAREHOUSE_FILENAME,
   warehousePath,
   writeDerivedFiles,
   writeFileAtomic,
@@ -1670,17 +1671,27 @@ function broadcastAgentLock(): void {
   }
 }
 
-let lockWatcher: fs.FSWatcher | null = null
 const storeWriteTracker = createWriteTracker()
 let storeWatchTimer: ReturnType<typeof setTimeout> | null = null
 let pendingStoreChange: StoreChangePayload | null = null
+const storeWatchers: fs.FSWatcher[] = []
 
-/** 扫一遍正本目录，找出「不是我们刚写的」那些文件（内容哈希变了才算变） */
-function collectStoreChanges(root: string): StoreChangePayload {
+/**
+ * 扫一遍正本目录，找出「不是我们刚写的」那些文件（内容哈希变了才算变）。
+ * 每个判定都打日志，方便判断卡在哪一层。
+ */
+function collectStoreChanges(root: string, options: { quiet?: boolean } = {}): StoreChangePayload {
+  const quiet = options.quiet === true
   const payload: StoreChangePayload = { warehouse: false, projects: [] }
 
   const whFile = warehousePath(root)
-  if (storeWriteTracker.shouldBroadcast(whFile, readTextFile(whFile))) payload.warehouse = true
+  const whContent = readTextFile(whFile)
+  if (storeWriteTracker.shouldBroadcast(whFile, whContent)) {
+    payload.warehouse = true
+    if (!quiet) console.log('[Store] 变更：', WAREHOUSE_FILENAME)
+  } else if (!quiet && whContent !== null) {
+    console.log('[Store] 忽略自写：', WAREHOUSE_FILENAME)
+  }
 
   const dir = projectDir(root)
   let files: string[] = []
@@ -1691,7 +1702,12 @@ function collectStoreChanges(root: string): StoreChangePayload {
   }
   for (const name of files) {
     const file = path.join(dir, name)
-    if (storeWriteTracker.shouldBroadcast(file, readTextFile(file))) payload.projects.push(name)
+    if (storeWriteTracker.shouldBroadcast(file, readTextFile(file))) {
+      payload.projects.push(name)
+      if (!quiet) console.log('[Store] 变更：', name)
+    } else if (!quiet) {
+      console.log('[Store] 忽略自写：', name)
+    }
   }
   return payload
 }
@@ -1702,13 +1718,16 @@ function flushStoreChange(): void {
   pendingStoreChange = null
   if (!payload) return
   if (!payload.warehouse && payload.projects.length === 0) return
-  for (const win of BrowserWindow.getAllWindows()) {
+
+  const windows = BrowserWindow.getAllWindows()
+  console.log('[Store] 广播外部改动：warehouse=' + payload.warehouse + ' projects=' + JSON.stringify(payload.projects) + ' 窗口数=' + windows.length)
+  for (const win of windows) {
     win.webContents.send('store:filesChanged', payload)
   }
 }
 
 /** 事件攒 150ms 再扫（一次保存会连着来好几个 fs 事件） */
-function scheduleStoreScan(): void {
+function scheduleStoreScan(reason: string): void {
   if (storeWatchTimer) return
   storeWatchTimer = setTimeout(() => {
     try {
@@ -1718,6 +1737,7 @@ function scheduleStoreScan(): void {
           ? { warehouse: pendingStoreChange.warehouse || next.warehouse, projects: [...new Set([...pendingStoreChange.projects, ...next.projects])] }
           : next
       }
+      if (!pendingStoreChange) console.log('[Store] 扫描完成（无外部改动）：', reason)
       flushStoreChange()
     } catch (error) {
       console.warn('[Store] 扫描正本目录失败：', (error as Error).message)
@@ -1725,32 +1745,45 @@ function scheduleStoreScan(): void {
   }, 150)
 }
 
-/** 监听 dataRoot（锁 + 仓库正本 + 工程正本）：一个 watcher 全包 */
-function startLockWatch(): void {
-  if (lockWatcher) return
-  const root = getDataRoot()
+function watchDir(dir: string, label: string): void {
   try {
-    ensureDataRoot(root)
-    // 先拍一次快照，避免启动瞬间把现有文件当成「刚被改」
-    collectStoreChanges(root)
-    lockWatcher = fs.watch(root, (_event, filename) => {
-      // filename 可能是 null（某些平台）或 Buffer
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const watcher = fs.watch(dir, (_event, filename) => {
       const name = filename ? String(filename) : ''
+      console.log('[Store] fs 事件：', label + (name ? '/' + name : '（无文件名）'))
       const kind = classifyStoreEvent(name)
-      if (kind.kind === 'lock' || !name) {
+      if (kind.kind === 'lock') {
         broadcastAgentLock()
         return
       }
-      // 工程目录里的文件：Windows 上目录事件只报「工程」这一层，所以一律重新扫一遍
-      scheduleStoreScan()
+      scheduleStoreScan(label + (name ? '/' + name : ''))
     })
-    lockWatcher.on('error', error => {
-      console.warn('[Lock] 监听中断：', (error as Error).message)
-      lockWatcher = null
+    watcher.on('error', error => {
+      console.warn('[Store] 监听中断（' + label + '）：', (error as Error).message)
     })
-    console.log('[Store] 正在监听正本目录：', root)
+    storeWatchers.push(watcher)
+    console.log('[Store] 正在监听：', dir)
   } catch (error) {
-    console.warn('[Lock] 无法监听锁目录：', (error as Error).message)
+    console.warn('[Store] 无法监听 ' + dir + '：', (error as Error).message)
+  }
+}
+
+/**
+ * 监听正本目录。
+ * fs.watch 默认不递归：工程/ 是子目录，只 watch 根目录会漏掉 工程/xxx.yml 的所有变化，
+ * 必须把根目录和 工程/ 分别 watch（这就是上一版热加载没生效的原因）。
+ */
+function startLockWatch(): void {
+  if (storeWatchers.length > 0) return
+  const root = getDataRoot()
+  try {
+    ensureDataRoot(root)
+    // 先拍一次快照（quiet），避免启动瞬间把现有文件当成「刚被改」
+    collectStoreChanges(root, { quiet: true })
+    watchDir(root, '根目录')
+    watchDir(projectDir(root), '工程')
+  } catch (error) {
+    console.warn('[Lock] 无法启动正本监听：', (error as Error).message)
   }
 }
 

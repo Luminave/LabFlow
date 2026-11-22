@@ -81,6 +81,7 @@ export function useStoreHotReload(): void {
     if (!subscribe) return
 
     const unsubscribe = subscribe((payload: StoreFilesChangedPayload) => {
+      console.log('[HotReload] 收到：' + JSON.stringify(payload))
       const state = useExperimentStore.getState()
       const current = state.currentExperiment
       const fileInfo = current ? getProjectFileInfo(current.id) : null
@@ -91,8 +92,11 @@ export function useStoreHotReload(): void {
         dirty: hasPendingAutoSave()
       })
 
+      console.log('[HotReload] 决策：' + JSON.stringify(plan))
+
       if (plan.reloadWarehouse) {
         void reloadWarehouseFromFile().then(ok => {
+          console.log('[HotReload] 应用：仓库' + (ok ? '（已重载）' : '（读取失败）'))
           if (ok) showGlobalToast('仓库文件已更新，已重新载入')
         })
       }
@@ -102,6 +106,7 @@ export function useStoreHotReload(): void {
         window.dispatchEvent(new CustomEvent('labflow:projectFileChanged', { detail: { prompt: true } }))
       } else if (plan.reloadProject && current) {
         void state.reloadExperimentFromFile(current.id).then(ok => {
+          console.log('[HotReload] 应用：工程 ' + current.name + (ok ? '（已重载）' : '（读取失败）'))
           if (ok) showGlobalToast('工程文件已更新，已重新载入')
         })
       }
