@@ -12,6 +12,7 @@
 
 import type { SubstanceColor, Tube, TubeGroup } from '@shared/types'
 import { parseWarehouseYml, toWarehouseYml, type WarehouseSnapshot } from '@/core/store/warehouseFile'
+import { resetWarehouseReagentsCache } from './projectSource'
 
 /** 上次读/写仓库文件时看到的 stat（写盘 expect 用；null = 还没读过） */
 let warehouseFileStat: { mtimeMs: number; size: number } | null = null
@@ -149,6 +150,9 @@ export async function saveWarehouseFileDetailed(
     const result = await dataRoot.writeWarehouse({ content, expect: warehouseFileStat })
     if (result.ok) {
       warehouseFileStat = result.stat
+      // 文件已经是新内容：projectSource 里那份「仓库试剂缓存」必须一起作废，
+      // 否则紧接着载入工程时，余量还按写盘前的旧值算（审查第 7 条）。
+      resetWarehouseReagentsCache()
       console.log('[Store] 写仓库正本：', result.path)
       return { status: 'saved' }
     }
@@ -220,6 +224,7 @@ export async function restoreWarehouseContent(previousText: string): Promise<boo
     const result = await dataRoot.writeWarehouse({ content: previousText, expect: warehouseFileStat })
     if (result.ok) {
       warehouseFileStat = result.stat
+      resetWarehouseReagentsCache()
       console.log('[Store] 仓库正本已恢复成结算前的内容')
       return true
     }

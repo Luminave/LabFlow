@@ -15,6 +15,7 @@ import { useWarehouseStore } from '../stores/warehouseStore'
 import { useGroupStore } from '../stores/groupStore'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
 import { backupBrokenWarehouseFile, loadWarehouseFile } from './warehouseSource'
+import { resetWarehouseReagentsCache } from './projectSource'
 import { showGlobalToast } from '../components/GlobalToast'
 
 export interface StoreFilesChangedPayload {
@@ -72,6 +73,9 @@ export async function reloadWarehouseFromFile(): Promise<boolean> {
   if (loaded.state !== 'ok' || !loaded.snapshot) return false
 
   const { snapshot } = loaded
+  // 审查第 7 条：热加载以前只改内存、不动 projectSource 的仓库试剂缓存，
+  // 重载后载入工程时余量还按旧缓存算。文件已换，缓存必须一起换。
+  resetWarehouseReagentsCache()
   useWarehouseStore.getState().setTubes(snapshot.reagents)
   useGroupStore.getState().setGroups(snapshot.groups)
   // 成分颜色存在 仓库.yml 里，文件里有就跟着换（store 没有批量 setter，逐条写内存即可）

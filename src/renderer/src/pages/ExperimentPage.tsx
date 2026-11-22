@@ -39,6 +39,8 @@ import { formatCheckIssues } from './experimentCheckMessages'
 import { projectInputFromExperiment } from '@/core/exporters'
 import { describeExportOutcome, runProjectExport } from '../utils/projectExport'
 import { setBoardCaptureSource } from '../utils/boardCapture'
+import { reportCompleteExperiment } from '../utils/experimentFeedback'
+import { showGlobalToast } from '../components/GlobalToast'
 import TubeNode from '../components/TubeNode'
 import TransferEdge from '../components/TransferEdge'
 import styles from './ExperimentPage.module.css'
@@ -1214,7 +1216,7 @@ export default function ExperimentPage() {
     await saveAsExperiment(saveAsName)
     setShowSaveAs(false)
     setSaveAsName('')
-    alert(t('alert.savedAs', language) + saveAsName)
+    showGlobalToast(t('alert.savedAs', language) + saveAsName)
   }
 
   // 创建耗损实验
@@ -1279,18 +1281,8 @@ export default function ExperimentPage() {
     if (!currentExperiment) return
 
     if (confirm(t('alert.confirmEnd', language))) {
-      try {
-        await completeExperiment()
-        alert(t('alert.experimentSaved', language))
-      } catch (error) {
-        // 结算没落地时绝不报「已保存」：把真正的原因告诉人
-        const message = (error as Error)?.message || (language === 'zh' ? '未知错误' : 'Unknown error')
-        alert(
-          language === 'zh'
-            ? `结束实验失败：${message}\n\n仓库和数据库都没有改动，画布上的内容还在，可以再试一次。`
-            : `Failed to complete the experiment: ${message}\n\nNothing was written to the warehouse or database; your canvas is unchanged, you can retry.`
-        )
-      }
+      // 成功/失败都走 2.6 秒自消的轻提示（不再 alert 抢焦点）；失败时控制台留全栈
+      await reportCompleteExperiment(() => completeExperiment(), language)
     }
   }
 
