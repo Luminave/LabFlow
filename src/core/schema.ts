@@ -62,6 +62,8 @@ export type ValidationCode =
   | 'config_order_invalid'
   | 'config_order_duplicate'
   | 'config_order_gap'
+  /** 源试管引用的仓库试剂在 仓库.yml 里找不到（结算会因此被拒绝） */
+  | 'warehouse_ref_missing'
 
 /** 结构化校验错误：{ code, tubeId, params }，不含任何自然语言文案 */
 export interface ValidationIssue {

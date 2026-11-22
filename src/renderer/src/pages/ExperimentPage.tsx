@@ -33,6 +33,7 @@ import { roundVolume } from '@shared/utils/calculations'
 import { computeEndState } from '@/core/endState'
 import { concentrationText, singleText } from '../utils/tubeNodeText'
 import { formatLockBanner, type ParsedAgentLock } from '@/core/lock'
+import { AgentLockError, notifyWriteDeferred } from '../utils/agentLock'
 import { computeMixture, sourcesIntoTube, solveRequiredVolumes } from '@/core/mix'
 import { validateExperiment } from '@/core/validate'
 import { formatCheckIssues } from './experimentCheckMessages'
@@ -215,14 +216,19 @@ export default function ExperimentPage() {
   const forceReleaseLock = useCallback(async () => {
     const ok = window.confirm('Agent 可能仍在写文件，强制解锁可能导致冲突，确定吗？')
     if (!ok) return
-    const result = await window.electronAPI?.forceReleaseAgentLock?.()
+    // 第 2 条：把界面上看到的那把锁的三元组一起交给主进程校验——锁在这次确认期间被别人换过，
+    // 主进程会拒删并告诉现在真正的主人（以前是裸删，谁都能把别人的锁踢掉）。
+    const holder = agentLock && !('broken' in agentLock) ? agentLock : null
+    const result = await window.electronAPI?.forceReleaseAgentLock?.(
+      holder ? { pid: holder.pid, agent: holder.agent, project: holder.project } : { force: true }
+    )
     if (result?.ok) {
       setAgentLock(null)
       showSaveToast(language === 'zh' ? '已强制解锁' : 'Lock released')
     } else {
       showSaveToast(language === 'zh' ? '解锁失败：' + (result?.error || '未知错误') : 'Failed to release lock')
     }
-  }, [showSaveToast, language])
+  }, [showSaveToast, language, agentLock])
 
   // 检查实验问题
   // 检查实验问题（内核校验 + UI 文案）
@@ -1125,6 +1131,12 @@ export default function ExperimentPage() {
     try {
       success = await saveCurrentExperiment(undefined, options)
     } catch (error) {
+      // 第 1 条：本工程被 Agent 锁着 → 一个字都没写。给轻提示，别报成保存失败
+      if (error instanceof AgentLockError) {
+        notifyWriteDeferred(error.lock)
+        showSaveToast(error.message)
+        return
+      }
       if (error instanceof ProjectFileConflictError) {
         // 文件被别人改过：绝不默默覆盖，先问主人（默认按钮是「重新载入」）
         const choice = await window.electronAPI?.dataRoot?.askConflict?.({
@@ -1304,8 +1316,13 @@ export default function ExperimentPage() {
 
   // 删除实验
   const handleDeleteExperiment = (id: string) => {
-    if (confirm(language === 'zh' ? '确定删除这个实验?此操作不可恢复。' : 'Delete this experiment? This cannot be undone.')) {
-      deleteExperiment(id)
+    // 第 4 条：文件不硬删，挪进 工程/_deleted/（想恢复就挪回来），所以文案不能再说「不可恢复」
+    const text =
+      language === 'zh'
+        ? '确定删除这个实验？\n工程文件会移到 工程/_deleted/ 里留档（不是硬删，想恢复可以手动挪回来），列表里会被移除。'
+        : 'Delete this experiment?\nIts project file is moved to 工程/_deleted/ (not erased, you can move it back), and it leaves the list.'
+    if (confirm(text)) {
+      void deleteExperiment(id)
     }
   }
 
@@ -1522,7 +1539,10 @@ export default function ExperimentPage() {
             lockBanner.level === 'other' || lockBanner.level === 'broken' ? styles.agentLockSoft : ''
           }`}
         >
-          <span className={styles.agentLockText}>{lockBanner.text}</span>
+          <span className={styles.agentLockText}>
+            {lockBanner.text}
+            {frozenByAgent ? (language === 'zh' ? '（已暂缓写入，等它解锁）' : ' (writes deferred until released)') : ''}
+          </span>
           {lockBanner.level !== 'other' && (
             <button className={styles.agentLockBtn} onClick={() => void forceReleaseLock()}>
               {language === 'zh' ? '强制解锁' : 'Force release'}

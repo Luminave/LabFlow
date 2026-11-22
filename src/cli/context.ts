@@ -16,7 +16,9 @@ import {
   projectDir,
   readProjectFile,
   readTextFile,
+  statFile,
   writeFileAtomic,
+  type FileStat,
   type ProjectFileInfo
 } from '../../electron/dataRoot'
 import { experimentFromProjectFile, missingReagentRefs } from '../core/store/projectFile'
@@ -45,6 +47,9 @@ export interface LoadedProject {
   experiment: Experiment
   warnings: string[]
   version: number
+  /** 读到时的原始文本与 stat（含内容哈希）——--apply 写盘前拿它做冲突检测 */
+  text: string
+  stat: FileStat | null
 }
 
 /**
@@ -73,7 +78,9 @@ export function loadProject(root: string, wanted: string): LoadedProject | null 
         path: found.path,
         experiment: { ...loaded.experiment, name },
         warnings: loaded.warnings,
-        version: loaded.version
+        version: loaded.version,
+        text: found.content,
+        stat: found.stat
       }
     }
   }
@@ -81,11 +88,20 @@ export function loadProject(root: string, wanted: string): LoadedProject | null 
 }
 
 /** 读 仓库.yml（没有就返回空快照，不抛） */
-export function loadWarehouse(root: string): { snapshot: WarehouseSnapshot; warnings: string[] } {
-  const text = readTextFile(path.join(root, WAREHOUSE_FILENAME))
-  if (text === null) return { snapshot: { groups: [], reagents: [] }, warnings: [`没有找到 ${WAREHOUSE_FILENAME}`] }
+export function loadWarehouse(root: string): {
+  snapshot: WarehouseSnapshot
+  warnings: string[]
+  /** 原始文本与 stat（含内容哈希）；文件不存在时都是 null——写盘前做冲突检测用 */
+  text: string | null
+  stat: FileStat | null
+} {
+  const target = path.join(root, WAREHOUSE_FILENAME)
+  const text = readTextFile(target)
+  if (text === null) {
+    return { snapshot: { groups: [], reagents: [] }, warnings: [`没有找到 ${WAREHOUSE_FILENAME}`], text: null, stat: null }
+  }
   const parsed = parseWarehouseYml(text)
-  return { snapshot: parsed.snapshot, warnings: parsed.warnings }
+  return { snapshot: parsed.snapshot, warnings: parsed.warnings, text, stat: statFile(target) }
 }
 
 /** 工程引用了仓库里不存在的试剂（id 在前缀里） */

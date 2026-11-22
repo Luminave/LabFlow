@@ -79,7 +79,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 工程导出（.yml / .canvas / SOP 一次写出）
   getAgentLock: () => ipcRenderer.invoke('lock:get'),
-  forceReleaseAgentLock: () => ipcRenderer.invoke('lock:forceRelease'),
+  /** 强制解锁：把界面看到的那把锁的三元组一起传上去，主进程校验一致才删（第 2 条） */
+  forceReleaseAgentLock: (payload?: { pid?: number | null; agent?: string; project?: string; force?: boolean }) =>
+    ipcRenderer.invoke('lock:forceRelease', payload),
   onStoreFilesChanged: (callback: (payload: { warehouse: boolean; projects: string[] }) => void) => {
     const listener = (_event: unknown, payload: { warehouse: boolean; projects: string[] }) => callback(payload)
     ipcRenderer.on('store:filesChanged', listener)
@@ -109,15 +111,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     statProject: (fileNameOrName: string) => ipcRenderer.invoke('data:stat-project', fileNameOrName),
     findProject: (id: string) => ipcRenderer.invoke('data:find-project', id),
     backupWarehouse: (payload: { content: string }) => ipcRenderer.invoke('data:backup-warehouse', payload),
-    writeProject: (payload: { id?: string; name: string; content: string; expect?: { mtimeMs: number; size: number } | null }) =>
+    writeProject: (payload: {
+      id?: string
+      name: string
+      content: string
+      expect?: { mtimeMs: number; size: number; hash?: string } | null
+    }) =>
       ipcRenderer.invoke('data:write-project', payload),
     readWarehouse: () => ipcRenderer.invoke('data:read-warehouse'),
-    writeWarehouse: (payload: { content: string; expect?: { mtimeMs: number; size: number } | null }) =>
+    writeWarehouse: (payload: { content: string; expect?: { mtimeMs: number; size: number; hash?: string } | null }) =>
       ipcRenderer.invoke('data:write-warehouse', payload),
     writeDerived: (files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]) =>
       ipcRenderer.invoke('data:write-derived', files),
     askConflict: (payload: { projectName: string; fileName?: string }) =>
       ipcRenderer.invoke('data:ask-conflict', payload),
+    /** 删工程：把 工程/<文件名>.yml 移进 工程/_deleted/（第 4 条），先移成功再删数据库 */
+    deleteProject: (payload: { id?: string; name?: string; fileName?: string }) =>
+      ipcRenderer.invoke('data:delete-project', payload),
   },
 
   // 深链接：笔记里点 labflow:// 链接时主进程会推过来，返回取消订阅函数

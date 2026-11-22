@@ -16,10 +16,13 @@ import fs from 'fs'
 // 导出设置的默认值与校验规则只有一份，直接在渲染进程/测试用的 core 里取
 // （只引 settings.ts，避免把 js-yaml 带进主进程启动路径）
 import { normalizeExportSettings, type ExportSettings } from '../src/core/exporters/settings'
-import { LOCK_FILENAME, parseAgentLock, type ParsedAgentLock } from '../src/core/lock'
+import { LOCK_FILENAME, checkLockRelease, parseAgentLock, type AgentLock, type ParsedAgentLock } from '../src/core/lock'
+// 写盘前的「外部改过没有」判定：以内容哈希为准（mtime 只作快速路径）
+import { checkExpectedContent, statWithHash } from '../src/core/store/fileStat'
 // 数据正本目录（第 1 步：正本是 yml，数据库降为缓存）
 import {
   DEFAULT_DATA_ROOT,
+  archiveProjectFile,
   ensureDataRoot,
   exportDir,
   backupBrokenWarehouse,
@@ -1812,13 +1815,42 @@ function startLockWatch(): void {
 
 ipcMain.handle('lock:get', () => readAgentLock())
 
-ipcMain.handle('lock:forceRelease', () => {
+/**
+ * 强制解锁（第 2 条：以前这里是裸删，谁都能把别人的锁踢掉）。
+ *
+ * 调用方必须把自己看到的那把锁的三元组（pid + agent + project）一起传上来；
+ * 主进程读到**现在**的锁文件再校验：
+ * - 三元组一致 → 删除（正常路径：界面刚读到的锁就是它要删的那把）；
+ * - 不一致 → 不删，返回真正的主人（阅读者看到的是旧锁、期间被别的 Agent 新写了一版）；
+ * - 锁文件读不懂 → 没有三元组可校验，只有显式 force（界面明确点的「强制解锁」）才删。
+ */
+ipcMain.handle('lock:forceRelease', (_, payload?: { pid?: number | null; agent?: string; project?: string; force?: boolean }) => {
   try {
     const file = lockFilePath()
-    if (fs.existsSync(file)) fs.unlinkSync(file)
-    return { ok: true }
+    if (!fs.existsSync(file)) return { ok: true, released: false, reason: '没有锁' }
+
+    const lock = readAgentLock()
+    const check = checkLockRelease(lock, payload || {}, { force: payload?.force === true })
+    if (!check.ok) {
+      console.warn('[Lock] 拒绝解锁：', check.reason)
+      return { ok: false, error: check.reason, holder: lock && !('broken' in lock) ? lock : null }
+    }
+
+    fs.unlinkSync(file)
+    broadcastAgentLock()
+    return { ok: true, released: true, holder: lock && !('broken' in lock) ? (lock as AgentLock) : null }
   } catch (error) {
     return { ok: false, error: (error as Error).message }
+  }
+})
+
+/** 删工程：先把正本文件移进 工程/_deleted/，成功后才允许删数据库（第 4 条） */
+ipcMain.handle('data:delete-project', (_, payload: { id?: string; name?: string; fileName?: string }) => {
+  try {
+    const root = getDataRoot()
+    return archiveProjectFile(root, payload || {})
+  } catch (error) {
+    return { ok: false as const, error: (error as Error).message }
   }
 })
 
@@ -1862,20 +1894,27 @@ ipcMain.handle('data:read-project', (_, fileNameOrName: string) => {
   const root = getDataRoot()
   const found = readProjectFile(root, fileNameOrName)
   if (!found) return { ok: false, reason: 'not-found' as const }
-  return { ok: true, path: found.path, content: found.content, stat: found.stat }
+  // stat 带内容哈希：之后保存时同内容重写不会被判成「外部修改」（第 6 条）
+  return { ok: true, path: found.path, content: found.content, stat: statWithHash(found.stat, found.content) }
 })
 
 ipcMain.handle('data:stat-project', (_, fileNameOrName: string) => {
   const root = getDataRoot()
   const found = readProjectFile(root, fileNameOrName)
-  return found ? found.stat : null
+  return found ? statWithHash(found.stat, found.content) : null
 })
 
 /** 按工程 id 找正本（工程在 LabFlow 外被改过名也认） */
 ipcMain.handle('data:find-project', (_, id: string) => {
   const found = findProjectFileById(getDataRoot(), id)
   if (!found) return { ok: false as const, reason: 'not-found' as const }
-  return { ok: true as const, path: found.path, fileName: found.fileName, content: found.content, stat: found.stat }
+  return {
+    ok: true as const,
+    path: found.path,
+    fileName: found.fileName,
+    content: found.content,
+    stat: statWithHash(found.stat, found.content)
+  }
 })
 
 /** 读不懂的仓库正本另存一份留证：仓库.broken-<时间戳>.yml（不动原文件） */
@@ -1894,7 +1933,11 @@ ipcMain.handle('data:backup-warehouse', (_, payload: { content: string }) => {
 
 /**
  * 写工程正本。
- * `expect` 是上次读/写时的 {mtimeMs,size}；文件被人手改过就对不上 → 不覆盖，返回 conflict。
+ * `expect` 是上次读/写时的 stat；文件被人手改过就不覆盖，返回 conflict。
+ *
+ * 2026-11-23 修（第 6 条）：判据从「mtime/size」改成「内容哈希」——
+ * 文件被同内容重写一次（编辑器另存、同步盘）mtime 会变，以前从此每次保存都弹「已被外部修改」。
+ * 现在 hash 相同就是没改，直接放行并把记录的 stat 更新掉。
  */
 ipcMain.handle(
   'data:write-project',
@@ -1906,15 +1949,15 @@ ipcMain.handle(
       const takenNames = listProjectFiles(root).map(file => file.fileName)
       const target = resolveProjectPath(root, payload.id, payload.name, takenNames)
       const current = statFile(target)
+      const currentContent = current ? readTextFile(target) : null
 
-      if (payload.expect && current) {
-        const changed = Math.abs(current.mtimeMs - payload.expect.mtimeMs) > 1 || current.size !== payload.expect.size
-        if (changed) {
-          return { ok: false, conflict: true as const, path: target, stat: current }
-        }
+      const check = checkExpectedContent(current, currentContent, payload.expect)
+      if (check.conflict) {
+        return { ok: false, conflict: true as const, path: target, stat: check.stat }
       }
 
-      const stat = writeFileAtomic(target, payload.content)
+      const written = writeFileAtomic(target, payload.content)
+      const stat = statWithHash(written, payload.content) as FileStat
       storeWriteTracker.noteWritten(target, payload.content)
       console.log('[Store] 写工程正本：', target)
       return { ok: true as const, path: target, fileName: path.basename(target), stat }
@@ -1930,7 +1973,7 @@ ipcMain.handle('data:read-warehouse', () => {
   const target = warehousePath(root)
   const content = readTextFile(target)
   if (content === null) return { ok: false as const, reason: 'not-found' as const }
-  return { ok: true as const, path: target, content, stat: statFile(target) }
+  return { ok: true as const, path: target, content, stat: statWithHash(statFile(target), content) }
 })
 
 ipcMain.handle('data:write-warehouse', (_, payload: { content: string; expect?: FileStat | null }) => {
@@ -1939,11 +1982,14 @@ ipcMain.handle('data:write-warehouse', (_, payload: { content: string; expect?: 
     ensureDataRoot(root)
     const target = warehousePath(root)
     const current = statFile(target)
-    if (payload.expect && current) {
-      const changed = Math.abs(current.mtimeMs - payload.expect.mtimeMs) > 1 || current.size !== payload.expect.size
-      if (changed) return { ok: false as const, conflict: true as const, stat: current }
-    }
-    const stat = writeFileAtomic(target, payload.content)
+    const currentContent = current ? readTextFile(target) : null
+
+    // 与工程正本同一套判据：内容哈希一致就不算冲突（第 6 条）
+    const check = checkExpectedContent(current, currentContent, payload.expect)
+    if (check.conflict) return { ok: false as const, conflict: true as const, stat: check.stat }
+
+    const written = writeFileAtomic(target, payload.content)
+    const stat = statWithHash(written, payload.content) as FileStat
     storeWriteTracker.noteWritten(target, payload.content)
     console.log('[Store] 写仓库正本：', target)
     return { ok: true as const, path: target, stat }

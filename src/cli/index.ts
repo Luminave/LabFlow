@@ -30,7 +30,8 @@ const HELP = `labflow —— LabFlow 工程文件的命令行（只读为主）
   diff <工程A> <工程B>               两个工程文件的差异（按管名列）
   export <工程> [--out <目录>]       写 SOP（默认 <数据根>/导出/）；--yml 再写一份 yml
   complete <工程> [--apply]          结算（默认只算不写；--apply 才改 仓库.yml 并把工程置 completed）
-  lock --project <工程> [--note ..]  加锁；unlock 解锁；status 看当前锁
+  lock --project <工程> [--note ..]  加锁；status 看当前锁
+  unlock [--force]                  解锁（要 pid+agent+project 都对得上；不是自己的锁得加 --force）
 
 通用开关：
   --json                            机器可读输出

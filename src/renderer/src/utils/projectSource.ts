@@ -95,6 +95,8 @@ function checkReagentRefs(experiment: Experiment, ids: Set<string> | null): stri
 export interface ProjectFileStat {
   mtimeMs: number
   size: number
+  /** 内容哈希（第 6 条）：mtime 变了但 hash 一样 = 没冲突，主进程据此放行 */
+  hash?: string
 }
 
 export interface ProjectSourceEntry {

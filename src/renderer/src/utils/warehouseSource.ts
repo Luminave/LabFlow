@@ -14,15 +14,17 @@ import type { SubstanceColor, Tube, TubeGroup } from '@shared/types'
 import { parseWarehouseYml, toWarehouseYml, type WarehouseSnapshot } from '@/core/store/warehouseFile'
 import { resetWarehouseReagentsCache } from './projectSource'
 
-/** 上次读/写仓库文件时看到的 stat（写盘 expect 用；null = 还没读过） */
-let warehouseFileStat: { mtimeMs: number; size: number } | null = null
+/** 上次读/写仓库文件时看到的 stat（写盘 expect 用；null = 还没读过）。hash 见第 6 条 */
+type WarehouseFileStat = { mtimeMs: number; size: number; hash?: string }
+
+let warehouseFileStat: WarehouseFileStat | null = null
 
 /** 测试用：清掉 stat 记忆 */
 export function resetWarehouseFileStat(): void {
   warehouseFileStat = null
 }
 
-export function warehouseFileStatSnapshot(): { mtimeMs: number; size: number } | null {
+export function warehouseFileStatSnapshot(): WarehouseFileStat | null {
   return warehouseFileStat
 }
 

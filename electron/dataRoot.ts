@@ -24,6 +24,8 @@ export const DEFAULT_DATA_ROOT = process.platform === 'win32'
 export const PROJECT_DIR = '工程'
 export const EXPORT_DIR = '导出'
 export const WAREHOUSE_FILENAME = '仓库.yml'
+/** 删掉的工程文件名挪到这里（不硬删，可人工恢复）；在 工程/ 下面，列表只看顶层 *.yml，不会混进来 */
+export const DELETED_DIR = '_deleted'
 
 export interface FileStat {
   mtimeMs: number
@@ -219,6 +221,78 @@ export function findProjectFileById(
 function backupStamp(date = new Date()): string {
   const pad = (value: number): string => String(value).padStart(2, '0')
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
+/** 删掉的工程文件归档目录：工程/_deleted */
+export function deletedDir(root: string): string {
+  return path.join(projectDir(root), DELETED_DIR)
+}
+
+export type ArchiveProjectResult =
+  | { ok: true; from: string; path: string; fileName: string }
+  | { ok: false; reason: 'not-found' }
+  | { ok: false; error: string }
+
+/**
+ * 按工程名（文件里写的 `name:`）找工程文件；文件名和工程名不一样时也认。
+ * `readProjectFile` 只认文件名，所以删工程要单独走一遍。
+ */
+function findProjectFileByName(root: string, name: string): { path: string; fileName: string; content: string; stat: FileStat } | null {
+  const wanted = name.trim()
+  if (!wanted) return null
+  const files = listProjectFiles(root)
+  // 先按文件名（文件名一般就是工程名），再按文件里写的 `name:`（有人手工改过文件名也认）
+  const hit =
+    files.find(info => info.name === wanted) ||
+    files.find(info => {
+      const text = readTextFile(info.path)
+      const match = text ? /^\s{0,4}name:\s*(.+)\s*$/m.exec(text) : null
+      return Boolean(match && match[1].replace(/^['"]|['"]$/g, '').trim() === wanted)
+    })
+  if (!hit) return null
+  const content = readTextFile(hit.path)
+  return content === null ? null : { path: hit.path, fileName: hit.fileName, content, stat: hit.stat }
+}
+
+/**
+ * 删工程时**移走**它的正本文件（第 4 条：以前删了数据库记录，`工程/<名>.yml` 留在盘上成孤儿，
+ * 以后手工放一份同名文件就「诈尸」，列表和文件对不上）。
+ *
+ * 移到 `工程/_deleted/<时间戳>-<原文件名>.yml`：
+ * - 不硬删，主人想恢复直接把文件挪回来就行；
+ * - 时间戳来自 backupStamp()，同一秒内重名追加 `-2`，绝不覆盖旧的归档。
+ *
+ * 找不到文件返回 `{ok:false, reason:'not-found'}`（让调用方照旧删数据库，别把它当失败）。
+ */
+export function archiveProjectFile(
+  root: string,
+  wanted: { id?: string; name?: string; fileName?: string },
+  date = new Date()
+): ArchiveProjectResult {
+  try {
+    const found =
+      (wanted.fileName ? readProjectFile(root, wanted.fileName) : null) ||
+      (wanted.id ? findProjectFileById(root, wanted.id) : null) ||
+      (wanted.name ? findProjectFileByName(root, wanted.name) : null)
+    if (!found) return { ok: false, reason: 'not-found' }
+
+    const dir = deletedDir(root)
+    fs.mkdirSync(dir, { recursive: true })
+    const original = path.basename(found.path)
+    const stamp = backupStamp(date)
+    let fileName = `${stamp}-${original}`
+    let target = path.join(dir, fileName)
+    for (let index = 2; fs.existsSync(target) && index < 1000; index++) {
+      fileName = `${stamp}-${index}-${original}`
+      target = path.join(dir, fileName)
+    }
+    fs.renameSync(found.path, target)
+    console.log('[dataRoot] 工程文件已归档：', found.path, '→', target)
+    return { ok: true, from: found.path, path: target, fileName }
+  } catch (error) {
+    console.error('[dataRoot] 归档工程文件失败：', error)
+    return { ok: false, error: (error as Error).message }
+  }
 }
 
 /**

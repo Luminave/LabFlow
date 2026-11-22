@@ -27,7 +27,8 @@ const TYPE_BY_CODE: Record<ValidationIssue['code'], string> = {
   config_order_missing: 'config_order_missing',
   config_order_invalid: 'config_order_invalid',
   config_order_duplicate: 'config_order_duplicate',
-  config_order_gap: 'config_order_gap'
+  config_order_gap: 'config_order_gap',
+  warehouse_ref_missing: 'warehouse_ref_missing'
 }
 
 function num(value: string | number | string[] | undefined): number {
@@ -91,6 +92,11 @@ export function formatCheckIssues(
         break
       case 'config_order_gap':
         message = `${zh ? '配置序号有跳过：从' : 'Config order gap: from'} ${str(params.from)} ${zh ? '跳到' : 'to'} ${str(params.to)}`
+        break
+      case 'warehouse_ref_missing':
+        message = zh
+          ? `这根试管引用的仓库试剂在仓库里找不到（id:${str(params.reagentId)}），结算会被拒绝；请先在仓库里补上或删掉这根管`
+          : `Referenced reagent is missing from the warehouse (id:${str(params.reagentId)}); settling will be refused`
         break
       default:
         message = ''

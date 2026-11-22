@@ -6,6 +6,7 @@
  *
  * 六项检查及其顺序与改动前完全一致（顺序决定错误列表的显示次序）：
  * 1. 输出体积 vs 可用体积（原料看仓库、仓库里的中间产物看仓库、新建中间产物看输入）
+ *    —— 顺带：源试管引用的试剂在仓库里找不到时另报 `warehouse_ref_missing`（第 7 条）
  * 2. 中间产物需要缓冲液补足但没有缓冲液
  * 3. 中间产物需要的成分没有任何源试管含它
  * 4. 中间产物目标体积与连线输入体积不匹配（差 > 0.1 μL）
@@ -37,6 +38,14 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
 
     if (tube.type === 'source') {
       const whTube = warehouseTubes.find(t => t.id === tube.id)
+      // 引用的试剂在仓库里找不到：单独报一条（结算也会因此拒绝），体积那条照旧按工程里的余量兜底
+      if (!whTube) {
+        issues.push({
+          code: 'warehouse_ref_missing',
+          tubeId: tube.id,
+          params: { reagentId: tube.id }
+        })
+      }
       const availableVolume = whTube
         ? baseVolume(whTube.remainingVolume, whTube.remainingVolumeUnit)
         : baseVolume(tube.remainingVolume, tube.remainingVolumeUnit)

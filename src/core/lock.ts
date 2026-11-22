@@ -86,6 +86,64 @@ export function lockTargetsProject(lock: AgentLock, target: LockTarget): boolean
   return (!!name && project === name) || (!!id && project === id)
 }
 
+/** 调用方身份：解锁/强制解锁必须和锁文件里的三元组对得上 */
+export interface LockCaller {
+  pid?: number | null
+  agent?: string
+  project?: string
+}
+
+/** 「<agent>/<pid>」——提示里指认锁的主人 */
+export function lockOwnerLabel(lock: AgentLock): string {
+  const pid = lock.pid === null || lock.pid === undefined ? '未知 pid' : String(lock.pid)
+  return `${lock.agent || '未知 Agent'}/${pid}`
+}
+
+export interface LockReleaseCheck {
+  ok: boolean
+  /** 不允许删时的中文原因（已含主人与不一致的字段） */
+  reason?: string
+}
+
+/**
+ * 能不能删这把锁（第 2 步补：以前 unlock / forceRelease 都是裸删，谁都能把别人的锁踢掉）。
+ *
+ * 规则：
+ * - `force: true`（CLI `--force` / 界面在「锁文件损坏」时点的强制解锁）→ 允许，调用方已明确知情；
+ * - 没有锁 → 允许（没什么可删的）；
+ * - 锁文件损坏 → 没有三元组可校验，**不许**（否则「校验」形同虚设），提示加 --force；
+ * - 正常锁 → pid + agent + project 三个都对上才允许，否则拒绝并指认真正的主人。
+ */
+export function checkLockRelease(
+  lock: ParsedAgentLock,
+  caller: LockCaller = {},
+  options: { force?: boolean } = {}
+): LockReleaseCheck {
+  if (options.force) return { ok: true }
+  if (!lock) return { ok: true }
+  if ('broken' in lock) {
+    return {
+      ok: false,
+      reason: `锁文件无法解析（${lock.reason}），无法校验归属；确认要删请加 --force`
+    }
+  }
+
+  const mismatch: string[] = []
+  const callerPid = caller.pid
+  const pidOk = typeof callerPid === 'number' && Number.isFinite(callerPid) && lock.pid === callerPid
+  if (!pidOk) mismatch.push('pid')
+  if ((caller.agent || '').trim() !== lock.agent) mismatch.push('agent')
+  // project 只在调用方给了才比（`labflow unlock` 不带 --project 就只校验 pid+agent）
+  const callerProject = (caller.project || '').trim()
+  if (callerProject && callerProject.toLowerCase() !== lock.project.trim().toLowerCase()) mismatch.push('project')
+
+  if (mismatch.length === 0) return { ok: true }
+  return {
+    ok: false,
+    reason: `锁属于 ${lockOwnerLabel(lock)}，不是当前调用方（${mismatch.join('、')} 不一致），未删除`
+  }
+}
+
 /** 锁已经持续了多少分钟（时间不可解析时当 0） */
 export function lockAgeMinutes(lock: AgentLock, now: number = Date.now()): number {
   const started = Date.parse(lock.startedAt)

@@ -74,6 +74,45 @@ export interface SettleInput {
   warehouse: Tube[]
 }
 
+/** 一管「引用了仓库里不存在的试剂」的来源试管 */
+export interface MissingReagentRef {
+  id: string
+  name: string
+}
+
+/**
+ * 结算前的引用检查（第 7 条）。
+ *
+ * 以前源试管的 id 在仓库里找不到时，结算循环既不更新也不报错——账悄悄少算一笔。
+ * 现在**拒绝结算**并点名是哪几管，让人先把仓库补回来（或者把画布上那根管删掉）。
+ *
+ * 只查 source：中间产物不在仓库里是正常的（本次实验新入仓），缓冲液不记体积。
+ */
+export function missingSourceRefTubes(
+  experiment: Pick<Experiment, 'tubes'>,
+  warehouse: readonly Tube[]
+): MissingReagentRef[] {
+  const known = new Set(warehouse.map(tube => tube.id))
+  return experiment.tubes
+    .filter(tube => tube.type === 'source' && !known.has(tube.id))
+    .map(tube => ({ id: tube.id, name: tube.name }))
+}
+
+/** 结算被「引用的试剂找不到」挡住（调用方 catch 它给中文原因，不要当未知异常） */
+export class MissingReagentRefError extends Error {
+  readonly tubes: MissingReagentRef[]
+
+  constructor(tubes: MissingReagentRef[]) {
+    const names = tubes.map(tube => `「${tube.name}」（${tube.id}）`).join('、')
+    super(
+      `拒绝结算：画布上 ${tubes.length} 根源试管引用的试剂在仓库里找不到：${names}。` +
+        '请先在仓库里补上这些试剂（或把这几根管从画布上删掉）再结算'
+    )
+    this.name = 'MissingReagentRefError'
+    this.tubes = tubes
+  }
+}
+
 const BASE_VOLUME_UNIT: VolumeUnit = 'μL'
 
 function volumeOf(tube: Tube): number {
@@ -126,6 +165,10 @@ export function mergeWarehouseBase(fileReagents: readonly Tube[], memoryReagents
  */
 export function settleExperiment(input: SettleInput, options: SettleOptions = {}): SettleResult {
   const warehouse = input.warehouse
+  // 结算前先做引用检查：源试管引用的试剂找不到就整笔拒绝（账不能悄悄少算）
+  const missingRefs = missingSourceRefTubes(input.experiment, warehouse)
+  if (missingRefs.length > 0) throw new MissingReagentRefError(missingRefs)
+
   const endStateTubes = computeEndState(
     {
       tubes: input.experiment.tubes,

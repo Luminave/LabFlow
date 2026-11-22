@@ -20,9 +20,19 @@ import { toSopMarkdown } from '../core/exporters/sop'
 import { projectInputFromExperiment } from '../core/exporters/types'
 import { projectFileText } from '../core/store/projectFile'
 import { toWarehouseYml } from '../core/store/warehouseFile'
-import { settleExperiment } from '../core/settle'
+import { MissingReagentRefError, settleExperiment } from '../core/settle'
+import { checkExpectedContent, hashContent } from '../core/store/fileStat'
+import { statFile, readTextFile } from '../../electron/dataRoot'
 import { formatCheckIssues } from '../../src/renderer/src/pages/experimentCheckMessages'
-import { LOCK_STALE_MINUTES, formatLockAge, lockAgeMinutes, type AgentLock } from '../core/lock'
+import {
+  LOCK_STALE_MINUTES,
+  checkLockRelease,
+  formatLockAge,
+  lockAgeMinutes,
+  lockOwnerLabel,
+  lockTargetsProject,
+  type AgentLock
+} from '../core/lock'
 import type { Experiment, Tube } from '../core/schema'
 
 import { WAREHOUSE_FILENAME, projectDir } from '../../electron/dataRoot'
@@ -529,9 +539,33 @@ export function commandLock(args: ParsedArgs): CommandResult {
   const sub = args.positionals[0] || 'status'
 
   if (sub === 'unlock') {
+    // 第 2 条：解锁要校验三元组（pid + agent + project 与锁文件一致）。
+    // 以前是无条件删——B 能把 A 的锁踢掉，A 还在写文件却没人知道。
+    const force = flagBool(args.flags, 'force')
+    const lock = readLock(root)
+    const caller = {
+      pid: process.pid,
+      agent: flagString(args.flags, 'agent') || 'codex/墨林',
+      project: flagString(args.flags, 'project') || args.positionals[1]
+    }
+    const check = checkLockRelease(lock, caller, { force })
+    if (!check.ok) {
+      if (json) {
+        return {
+          code: EXIT_FINDINGS,
+          text: '',
+          json: { ok: false, released: false, reason: check.reason, lock }
+        }
+      }
+      return {
+        code: EXIT_FINDINGS,
+        text: `${check.reason}\n（确认要删就加 --force：labflow unlock --force）`
+      }
+    }
     removeLock(root)
-    if (json) return { code: EXIT_OK, text: '', json: { ok: true, released: true } }
-    return { code: EXIT_OK, text: `已解锁（${path.join(root, '.agent-lock')}）` }
+    const holder = lock && !('broken' in lock) ? lockOwnerLabel(lock) : ''
+    if (json) return { code: EXIT_OK, text: '', json: { ok: true, released: true, force, holder } }
+    return { code: EXIT_OK, text: `已解锁（${path.join(root, '.agent-lock')}）${force && holder ? `；强制删掉了 ${holder} 的锁` : ''}` }
   }
 
   if (sub === 'status' || sub === '') {
@@ -597,7 +631,7 @@ export function commandComplete(args: ParsedArgs): CommandResult {
     }
   }
 
-  const { snapshot, warnings: warehouseWarnings } = loadWarehouse(root)
+  const { snapshot, warnings: warehouseWarnings, text: warehouseTextAtRead, stat: warehouseStatAtRead } = loadWarehouse(root)
   // 基底必须是仓库全集：仓库.yml 不存在 / 读不出试剂时不能当「空仓库」结算，
   // 否则写出来的 仓库.yml 只剩本实验新入仓的那几根（和界面那次同类：基底不是全量）
   if (snapshot.reagents.length === 0) {
@@ -607,10 +641,25 @@ export function commandComplete(args: ParsedArgs): CommandResult {
     }
   }
   const now = new Date().toISOString()
-  const settled = settleExperiment(
-    { experiment: project.experiment, warehouse: snapshot.reagents },
-    { now: () => now }
-  )
+  let settled: ReturnType<typeof settleExperiment>
+  try {
+    settled = settleExperiment({ experiment: project.experiment, warehouse: snapshot.reagents }, { now: () => now })
+  } catch (error) {
+    // 第 7 条：源试管引用的试剂在仓库里找不到 → 拒绝结算（core 里抛，这里翻成人话 + 退出码 1）
+    if (error instanceof MissingReagentRefError) {
+      const named = error.tubes.map(tube => `「${tube.name}」（${tube.id}）`).join('、')
+      const text = `拒绝结算：画布上 ${error.tubes.length} 根源试管引用的试剂在仓库里找不到：${named}。\n请先在 仓库.yml 里补上这些试剂（或把这几根管从画布上删掉）再结算。`
+      if (json) {
+        return {
+          code: EXIT_FINDINGS,
+          text: '',
+          json: { ok: false, applied: false, missingRefs: error.tubes, project: project.experiment.name }
+        }
+      }
+      return { code: EXIT_FINDINGS, text }
+    }
+    throw error
+  }
 
   const usageLines = settled.usage.map(item => {
     const tail = item.depleted ? '　→ 已耗尽' : ''
@@ -651,12 +700,31 @@ export function commandComplete(args: ParsedArgs): CommandResult {
     }
   }
 
+  // 第 1 条：本工程被 Agent 锁着 → 一个文件都不写（退出码 1，中文原因）
+  const agentLock = readLock(root)
+  if (agentLock && !('broken' in agentLock)) {
+    const mine = lockTargetsProject(agentLock, { id: project.experiment.id, name: project.experiment.name })
+    if (mine) {
+      const holder = lockOwnerLabel(agentLock)
+      if (json) {
+        return {
+          code: EXIT_FINDINGS,
+          text: '',
+          json: { ok: false, applied: false, locked: true, holder, project: project.experiment.name }
+        }
+      }
+      return {
+        code: EXIT_FINDINGS,
+        text: `拒绝写入：工程「${project.experiment.name}」正被 Agent 锁着（${holder}），已暂缓写入，一个文件都没改。\n等它解锁（labflow unlock --force）后再重跑本次结算。`
+      }
+    }
+  }
+
   const warehouseText = toWarehouseYml({
     groups: snapshot.groups,
     reagents: settled.warehouseAfter,
     substanceColors: snapshot.substanceColors
   })
-  writeFileAtomic(path.join(root, WAREHOUSE_FILENAME), warehouseText)
 
   const completedExperiment: Experiment = {
     ...project.experiment,
@@ -664,7 +732,77 @@ export function commandComplete(args: ParsedArgs): CommandResult {
     completedAt: now,
     endStateTubes: settled.endStateTubes
   }
-  writeFileAtomic(project.path, projectFileText(completedExperiment))
+  const projectText = projectFileText(completedExperiment)
+
+  // 第 3 条：写之前先按**内容哈希**校验两份正本没被外部改过（mtime 只当快速路径）。
+  // 冲突就一个文件都不写——以前是直接覆盖，外部改过的内容当场丢掉。
+  const warehouseTarget = path.join(root, WAREHOUSE_FILENAME)
+  const warehouseExpect = warehouseStatAtRead
+    ? {
+        mtimeMs: warehouseStatAtRead.mtimeMs,
+        size: warehouseStatAtRead.size,
+        hash: warehouseTextAtRead === null ? undefined : hashContent(warehouseTextAtRead)
+      }
+    : null
+  const projectExpect = project.stat
+    ? {
+        mtimeMs: project.stat.mtimeMs,
+        size: project.stat.size,
+        hash: typeof project.text === 'string' ? hashContent(project.text) : undefined
+      }
+    : null
+
+  const conflicts: string[] = []
+  const warehouseCheck = checkExpectedContent(statFile(warehouseTarget), readTextFile(warehouseTarget), warehouseExpect)
+  if (warehouseCheck.conflict) conflicts.push(WAREHOUSE_FILENAME)
+  const projectCheck = checkExpectedContent(statFile(project.path), readTextFile(project.path), projectExpect)
+  if (projectCheck.conflict) conflicts.push(path.basename(project.path))
+
+  if (conflicts.length > 0) {
+    if (json) {
+      return {
+        code: EXIT_FINDINGS,
+        text: '',
+        json: {
+          ok: false,
+          conflict: true,
+          applied: false,
+          conflicts,
+          wroteWarehouse: false,
+          wroteProject: false,
+          project: project.experiment.name
+        }
+      }
+    }
+    return {
+      code: EXIT_FINDINGS,
+      text: `拒绝写入：${conflicts.join('、')} 已被外部修改，请重跑（一个文件都没写）`
+    }
+  }
+
+  writeFileAtomic(warehouseTarget, warehouseText)
+  try {
+    writeFileAtomic(project.path, projectText)
+  } catch (error) {
+    // 第二份写失败：把仓库那份恢复回原文，别留「一半结算」
+    const before = warehouseTextAtRead
+    if (before !== null) {
+      try {
+        writeFileAtomic(warehouseTarget, before)
+      } catch (restoreError) {
+        console.error('[complete] 恢复 仓库.yml 失败：', restoreError)
+      }
+    }
+    const reason = (error as Error)?.message || '未知原因'
+    if (json) {
+      return {
+        code: EXIT_FINDINGS,
+        text: '',
+        json: { ok: false, applied: false, wroteWarehouse: false, wroteProject: false, error: reason }
+      }
+    }
+    return { code: EXIT_FINDINGS, text: `写入工程正本失败（${reason}），已把 仓库.yml 恢复原状，请重跑` }
+  }
 
   if (json) return { code: EXIT_OK, text: '', json: { ...payload, wroteWarehouse: true, wroteProject: true } }
   return {

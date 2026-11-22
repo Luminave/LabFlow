@@ -12,6 +12,7 @@
  */
 
 import { showGlobalToast } from '../components/GlobalToast'
+import { AgentLockError } from './agentLock'
 
 export type FeedbackLanguage = 'zh' | 'en'
 
@@ -41,6 +42,12 @@ export async function reportCompleteExperiment(
     showGlobalToast(completeSuccessText(language))
     return true
   } catch (error) {
+    // 第 1 条：本工程被 Agent 锁住不是「失败」，是「暂缓写入」——不要报成结束实验失败
+    if (error instanceof AgentLockError) {
+      console.warn('[completeExperiment] 本工程被 Agent 锁住，已暂缓写入：', error.message)
+      showGlobalToast(error.message)
+      return false
+    }
     const reason = (error as Error)?.message || (language === 'zh' ? '未知错误' : 'Unknown error')
     // 控制台留全栈：轻提示 2.6 秒就没了，真正排查还得看这里
     console.error('[completeExperiment] 结束实验失败：', error)

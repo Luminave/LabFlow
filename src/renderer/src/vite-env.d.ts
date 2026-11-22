@@ -62,6 +62,8 @@ interface ExportSettingsConfig {
 interface DataFileStat {
   mtimeMs: number
   size: number
+  /** 内容哈希：判「外部改过没有」以它为准，mtime 只作快速路径（第 6 条） */
+  hash?: string
 }
 
 interface DataRootInfo {
@@ -113,6 +115,12 @@ interface DataRootAPI {
     files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]
   ) => Promise<{ ok: boolean; directory?: string; written?: { name: string; size: number }[]; error?: string }>
   askConflict: (payload: { projectName: string; fileName?: string }) => Promise<'reload' | 'overwrite' | 'cancel'>
+  /** 删工程：把 工程/<文件名>.yml 移进 工程/_deleted/（第 4 条） */
+  deleteProject: (payload: { id?: string; name?: string; fileName?: string }) => Promise<
+    | { ok: true; from: string; path: string; fileName: string }
+    | { ok: false; reason: 'not-found' }
+    | { ok: false; error: string }
+  >
 }
 
 // 存储配置 API
@@ -184,7 +192,12 @@ interface ElectronAPI {
   onOpenProject?: (callback: (url: string) => void) => () => void
   /** Agent 锁（第 2 步）：读当前锁、强制解锁、订阅变化 */
   getAgentLock?: () => Promise<ParsedAgentLockPayload>
-  forceReleaseAgentLock?: () => Promise<{ ok: boolean; error?: string }>
+  forceReleaseAgentLock?: (payload?: {
+    pid?: number | null
+    agent?: string
+    project?: string
+    force?: boolean
+  }) => Promise<{ ok: boolean; released?: boolean; error?: string; reason?: string; holder?: unknown }>
   onStoreFilesChanged?: (cb: (payload: { warehouse: boolean; projects: string[] }) => void) => () => void
   onAgentLockChanged?: (callback: (payload: ParsedAgentLockPayload) => void) => () => void
   /** 数据正本目录（工程/ 仓库/ 导出） */

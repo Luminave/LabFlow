@@ -93,7 +93,13 @@ function writeProject(experiment: Experiment, stem = experiment.name): string {
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'labflow-cli-'))
   writeProject(makeExperiment())
-  fs.writeFileSync(path.join(root, '仓库.yml'), toWarehouseYml({ groups: [], reagents: [] }), 'utf8')
+  // 仓库里必须真有「E1」这根试剂：第 7 条起「源试管引用的试剂找不到」会报 warehouse_ref_missing，
+  // 空仓库的夹具会让「没问题的工程」那条变成有问题的工程
+  fs.writeFileSync(
+    path.join(root, '仓库.yml'),
+    toWarehouseYml({ groups: [], reagents: [makeExperiment().tubes[0]] }),
+    'utf8'
+  )
 })
 
 afterAll(() => {
