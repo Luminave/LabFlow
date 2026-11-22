@@ -22,6 +22,7 @@
  */
 
 import { computeEndState } from './endState'
+import { aggregateFlows } from './aggregate'
 import type { Experiment, Substance, Tube, TransferConnection, VolumeUnit } from './schema'
 import { denormalizeVolume, normalizeVolume, roundVolume } from './units'
 
@@ -267,5 +268,177 @@ export function settleExperiment(input: SettleInput, options: SettleOptions = {}
     })),
     usage,
     depleted
+  }
+}
+
+// ============================== 回退（结算的反向） ==============================
+
+/** 回退需要看到的工程字段（快照类字段只用来判断「这根中间产物是不是本工程新入仓的」） */
+export interface RevertInput {
+  experiment: Pick<Experiment, 'tubes' | 'connections' | 'warehouseSnapshot' | 'endStateTubes'>
+  /** 仓库**当前**全集（仓库.yml 正本那份）；不是建工程时的快照 */
+  warehouse: readonly Tube[]
+}
+
+/** 一根加回体积的试剂 */
+export interface RevertRestored {
+  tubeId: string
+  name: string
+  /** 加回的体积（µL 口径，与 settle 的 `usage.used` 对称） */
+  added: number
+  /** 实际写回仓库时按那根管自己的单位 */
+  unit: VolumeUnit
+  /** 加回前 / 后的余量（µL） */
+  before: number
+  after: number
+}
+
+/** 想动但没动的条目（必须原样报给用户，不许悄悄放过） */
+export interface RevertSkipped {
+  tubeId: string
+  name: string
+  reason: string
+}
+
+export interface RevertResult {
+  /** 回退后的仓库（= 当前仓库逐管加回 + 删掉本工程新入仓的中间产物） */
+  warehouseAfter: Tube[]
+  /** 余量/状态被改过的条目（可直接逐条写库） */
+  updated: Tube[]
+  /** 加回明细（与 settle 的 usage 对称） */
+  restored: RevertRestored[]
+  /** 本工程新入仓、这次要删掉的中间产物 */
+  removedCreatedTubes: Tube[]
+  /** 要删的 id（截断护栏的 explicitDelete 只放行这些） */
+  deleteIds: string[]
+  /** 没动的原因（调用方必须提示，不能当作「都改好了」） */
+  skipped: RevertSkipped[]
+}
+
+/**
+ * 回退工程量：把**本工程结算时扣掉的量**加回当前仓库（必修 1）。
+ *
+ * 为什么不能再用 `experiment.warehouseSnapshot` 整份覆盖：
+ * 快照只在建工程那一刻写一次，从建工程到回退之间仓库的任何变化（别的工程结算、新加试剂）
+ * 都会被整份抹掉。这里改成与 `settleExperiment` 完全对称的做法：
+ *
+ * - 基底 = 传入的**当前**仓库（调用方用 `mergeWarehouseBase(仓库.yml, 内存)` 拼）；
+ * - 加回量 = 本工程画布连线的移出体积（settle 里 `used = before − (before − out)`，也就是 out）；
+ * - 只碰本工程画布上真的用到的管子：源试管照量加回；仓库里原本就有的中间产物照量加回；
+ * - 本工程新入仓的中间产物（画布上有、建工程时的快照里没有）：只有当前余量与结算后的
+ *   结束状态**完全一致**（说明结算后没被别人动过）才删，否则跳过并说明原因；
+ * - 其余条目**原样保留（同一个对象引用、顺序不变）**。
+ *
+ * 纯函数：不改传入数组，时间由 `options.now` 提供。
+ */
+export function revertExperimentUsage(
+  input: RevertInput,
+  options: SettleOptions = {}
+): RevertResult {
+  const warehouse = input.warehouse
+  const stamp = options.now ? options.now() : undefined
+  const { outVolume } = aggregateFlows(input.experiment.connections as TransferConnection[])
+
+  const snapshotIds = input.experiment.warehouseSnapshot
+    ? new Set(input.experiment.warehouseSnapshot.map(tube => tube.id))
+    : null
+  const endById = new Map<string, Tube>()
+  for (const tube of input.experiment.endStateTubes || []) endById.set(tube.id, tube)
+
+  const byId = new Map<string, Tube>()
+  const updated: Tube[] = []
+  const restored: RevertRestored[] = []
+  const removedCreatedTubes: Tube[] = []
+  const skipped: RevertSkipped[] = []
+
+  /** 加回 out（µL），中间产物的上限是它自己的总量 */
+  const addBack = (current: Tube, out: number, cap?: number): void => {
+    const before = volumeOf(current)
+    let target = before + out
+    if (typeof cap === 'number' && cap > 0) target = Math.min(target, cap)
+    const after = roundVolume(target)
+    if (after <= before + 0.000001) return
+    const next: Tube = {
+      ...current,
+      remainingVolume: writeBack(after, current.remainingVolumeUnit),
+      status: isDepleted(after) ? 'depleted' : 'active'
+    }
+    if (stamp) next.updatedAt = stamp
+    byId.set(next.id, next)
+    updated.push(next)
+    restored.push({
+      tubeId: current.id,
+      name: current.name,
+      added: roundVolume(after - before),
+      unit: current.remainingVolumeUnit || BASE_VOLUME_UNIT,
+      before,
+      after
+    })
+  }
+
+  for (const tube of input.experiment.tubes) {
+    // 缓冲液不记体积；上样/废液不进仓库
+    if (tube.type === 'buffer' || tube.type === 'sample' || tube.type === 'waste') continue
+
+    const current = warehouse.find(item => item.id === tube.id)
+    const out = roundVolume(outVolume.get(tube.id) || 0)
+
+    if (!current) {
+      // 画布上有、仓库里已经没有了：不能凭空加回一根
+      if (tube.type === 'source') {
+        skipped.push({
+          tubeId: tube.id,
+          name: tube.name,
+          reason: '仓库里已经没有这根试剂，没法把体积加回去，请手工补'
+        })
+      }
+      continue
+    }
+
+    if (tube.type === 'intermediate' && snapshotIds && !snapshotIds.has(tube.id)) {
+      // 本工程新入仓的中间产物：结算后没被别人动过才敢删
+      const end = endById.get(tube.id)
+      const untouched = Boolean(end) && Math.abs(roundVolume(volumeOf(current)) - roundVolume(volumeOf(end!))) < 0.000001
+      if (!untouched) {
+        skipped.push({
+          tubeId: tube.id,
+          name: tube.name,
+          reason: end
+            ? '这是本工程新入仓的中间产物，但结算后余量又变过（可能被后面的实验动过），没删，请手工确认'
+            : '这是本工程新入仓的中间产物，但没有结算后的结束状态可比对，没删，请手工确认'
+        })
+        continue
+      }
+      removedCreatedTubes.push(current)
+      continue
+    }
+
+    if (tube.type === 'intermediate' && !snapshotIds) {
+      skipped.push({
+        tubeId: tube.id,
+        name: tube.name,
+        reason: '没有建工程时的仓库快照，分不清这根中间产物是不是本工程新入仓的，没动'
+      })
+      continue
+    }
+
+    if (out <= 0) continue
+    addBack(current, out, tube.type === 'intermediate' ? toBase(current.totalVolume, current.totalVolumeUnit) : undefined)
+  }
+
+  const removedIds = new Set(removedCreatedTubes.map(tube => tube.id))
+  const warehouseAfter: Tube[] = []
+  for (const tube of warehouse) {
+    if (removedIds.has(tube.id)) continue
+    warehouseAfter.push(byId.get(tube.id) || tube)
+  }
+
+  return {
+    warehouseAfter,
+    updated,
+    restored,
+    removedCreatedTubes,
+    deleteIds: removedCreatedTubes.map(tube => tube.id),
+    skipped
   }
 }

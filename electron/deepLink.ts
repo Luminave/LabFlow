@@ -14,9 +14,22 @@ import {
   createProtocolRegistrar,
   findDeepLinkArg
 } from '../src/core/deepLink'
+import { createDeepLinkQueue } from './deepLinkQueue'
 
-/** 窗口还没加载完就收到的链接先排队，加载完再发，避免渲染进程错过事件 */
-let pendingUrl: string | null = null
+/**
+ * 窗口还没准备好时收到的链接先放这里。
+ *
+ * 关键语义（2026-11-23 冷启动 bug 的修法）：**放进来就一直留着，直到渲染层主动来取**。
+ * 只靠 `did-finish-load` 里 send 一次是不行的——渲染层的订阅在 React effect 里注册，
+ * 比 load 事件更晚，那一次 send 会被丢掉，而且没有任何补救机会。
+ * 投递策略（什么时候能 push、什么时候只能留着）也收在这个模块里，见 deepLinkQueue.ts。
+ */
+const pendingLink = createDeepLinkQueue()
+
+/** 页面开始（重新）加载：渲染层要重新订阅，之前「可以收推送」的状态作废 */
+export function resetRendererReady(): void {
+  pendingLink.resetRenderer()
+}
 
 /**
  * 找出「跑哪个应用目录」：注册表命令里那一段。
@@ -54,7 +67,7 @@ function focusMainWindow(): void {
 export function deliverDeepLink(url: string): void {
   const window = BrowserWindow.getAllWindows()[0]
   if (!window || window.isDestroyed()) {
-    pendingUrl = url
+    pendingLink.push(url)
     return
   }
 
@@ -62,20 +75,24 @@ export function deliverDeepLink(url: string): void {
   // 表现就是一个白窗口（这是踩过的坑）。
   focusMainWindow()
 
-  if (window.webContents.isLoadingMainFrame()) {
-    pendingUrl = url
+  // 页面还在加载、或渲染层还没订阅好：这时 send 出去没人听，等于丢（这就是冷启动 bug）。
+  // 留在 pending 里，等渲染层挂载后来 take。冷启动因此只走「拉」这一条路，不会重复。
+  if (!pendingLink.canPushNow(window.webContents.isLoadingMainFrame())) {
+    pendingLink.push(url)
     return
   }
 
   window.webContents.send('deeplink:open', url)
 }
 
-/** 窗口加载完成后把排队的链接补发一次 */
-export function flushPendingDeepLink(): void {
-  if (!pendingUrl) return
-  const url = pendingUrl
-  pendingUrl = null
-  deliverDeepLink(url)
+/**
+ * 渲染层挂载完订阅后主动来取（`ipcMain.handle('deeplink:take-pending')`）。
+ *
+ * 顺带把「渲染层已就绪」置为 true：从这一刻起热投递才允许直接 push。
+ * 取走即清空，第二次调用返回 null（所以同一条链接不会被处理两遍）。
+ */
+export function takePendingDeepLink(): string | null {
+  return pendingLink.takeForRenderer()
 }
 
 /**

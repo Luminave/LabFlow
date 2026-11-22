@@ -129,9 +129,26 @@ function useProjectDeepLink() {
       navigate('/experiment')
     }
 
+    // 冷启动时主进程会把链接留在 pending 里、不抢发（抢发那一次会早于这里的订阅而丢掉，
+    // 2026-11-23 安装版实测）。所以订阅完之后主动问一次「有没有待处理链接」，
+    // 有就立刻处理；主进程那边取走即清空，同一条不会处理两遍。
+    // 先订阅再拉取：拉取期间到达的链接也接得住。
     const unsubscribe = subscribe((url: string) => {
       void openProject(url)
     })
+
+    const takePending = window.electronAPI?.takePendingProjectLink
+    if (typeof takePending === 'function') {
+      void (async () => {
+        try {
+          const pending = await takePending()
+          if (pending) void openProject(pending)
+        } catch (e) {
+          console.error('[DeepLink] 拉取待处理链接失败:', e)
+        }
+      })()
+    }
+
     return () => {
       if (typeof unsubscribe === 'function') unsubscribe()
     }

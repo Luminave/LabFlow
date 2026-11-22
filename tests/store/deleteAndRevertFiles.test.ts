@@ -31,17 +31,25 @@ function tube(over: Partial<Tube> & Pick<Tube, 'id' | 'name' | 'type'>): Tube {
 }
 
 function makeExperiment(status: Experiment['status'] = 'completed'): Experiment {
+  // 画布：r-1 起始 200 µL，往样品里移了 100 µL，并生成一根中间产物 t-new（结算后才入仓）
+  const created = tube({ id: 't-new', name: '10E1', type: 'intermediate', remainingVolume: 50 })
   return {
     id: 'exp-1',
     name: '演示工程',
     createdAt: '2026-11-18T00:00:00.000Z',
     updatedAt: '2026-11-18T00:00:00.000Z',
     status,
-    tubes: [tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 100 })],
+    tubes: [
+      tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 200 }),
+      tube({ id: 's-1', name: '样品1', type: 'sample', totalVolume: 0, remainingVolume: 0 }),
+      created
+    ],
     tubePositions: [],
-    connections: [],
+    connections: [
+      { id: 'c1', fromTubeId: 'r-1', toTubeId: 's-1', volume: 100, volumeUnit: 'μL' }
+    ] as Experiment['connections'],
     completedAt: '2026-11-20T00:00:00.000Z',
-    endStateTubes: [tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 100 })],
+    endStateTubes: [tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 100 }), created],
     warehouseSnapshot: [tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 200 })]
   }
 }
@@ -266,8 +274,9 @@ describe('回退：两个正本都写、状态回到 draft（第 5 条）', () =
     expect(api.order[0]).toBe('writeProject')
 
     // 仓库正本：写了一次，且是「显式删除」形态（回退必然让条目变少，不能撞截断护栏）
+    // 必修 1 之后只放行「本工程自己新入仓的那几根」，所以这里是 id 数组而不是 true
     expect(writerCalls).toHaveLength(1)
-    expect(writerCalls[0].explicitDelete).toBe(true)
+    expect(writerCalls[0].explicitDelete).toEqual(['t-new'])
 
     // 数据库在文件之后：删掉结算新增的中间产物，并按快照写回余量
     expect(api.deleteTube).toHaveBeenCalledTimes(1)
@@ -332,5 +341,134 @@ describe('回退：两个正本都写、状态回到 draft（第 5 条）', () =
 
     expect(api.writeProject).toHaveBeenCalledTimes(0)
     expect(api.toasts.join('\n')).toContain('读不懂')
+  })
+})
+
+/**
+ * 必修 1：回退必须以**当前**仓库为基底，只把本工程扣掉的量加回去。
+ *
+ * 事故形状：以前拿建工程时那份 `warehouseSnapshot` 整份覆盖仓库 →
+ * 建工程到回退之间别人的结算、新加的试剂全被抹掉。
+ */
+describe('回退：只加回本工程用掉的那部分，不动别人的（必修 1）', () => {
+  function wideExperiment(): Experiment {
+    const originals = Array.from({ length: 39 }, (_, i) =>
+      tube({ id: `r-${i + 1}`, name: `试剂${i + 1}`, type: 'source', remainingVolume: 200 })
+    )
+    return {
+      id: 'exp-wide',
+      name: '宽工程',
+      createdAt: '2026-11-18T00:00:00.000Z',
+      updatedAt: '2026-11-18T00:00:00.000Z',
+      completedAt: '2026-11-20T00:00:00.000Z',
+      status: 'completed',
+      tubes: [...originals, tube({ id: 's-1', name: '样品1', type: 'sample', totalVolume: 0, remainingVolume: 0 })],
+      tubePositions: [],
+      connections: [
+        { id: 'c1', fromTubeId: 'r-1', toTubeId: 's-1', volume: 10, volumeUnit: 'μL' },
+        { id: 'c2', fromTubeId: 'r-2', toTubeId: 's-1', volume: 20, volumeUnit: 'μL' },
+        { id: 'c3', fromTubeId: 'r-3', toTubeId: 's-1', volume: 30, volumeUnit: 'μL' }
+      ] as Experiment['connections'],
+      endStateTubes: [
+        tube({ id: 'r-1', name: '试剂1', type: 'source', remainingVolume: 190 }),
+        tube({ id: 'r-2', name: '试剂2', type: 'source', remainingVolume: 180 }),
+        tube({ id: 'r-3', name: '试剂3', type: 'source', remainingVolume: 170 })
+      ],
+      warehouseSnapshot: originals
+    }
+  }
+
+  it('仓库 39 条 + 期间新增 2 条 → 回退后 41 条：新增的在、用掉的 3 条体积回来、其余不动', async () => {
+    const experiment = wideExperiment()
+    // 当前仓库：本工程结算后 r-1/2/3 少了，另有两根是这段时间别的工程加进来的
+    const warehouseNow = [
+      ...experiment.tubes
+        .filter(item => item.type === 'source')
+        .map(item =>
+          item.id === 'r-1'
+            ? { ...item, remainingVolume: 190 }
+            : item.id === 'r-2'
+              ? { ...item, remainingVolume: 180 }
+              : item.id === 'r-3'
+                ? { ...item, remainingVolume: 170 }
+                : item
+        ),
+      tube({ id: 'n-1', name: '别人新加的A', type: 'source', remainingVolume: 500 }),
+      tube({ id: 'n-2', name: '别人新加的B', type: 'source', remainingVolume: 600 })
+    ]
+    expect(warehouseNow).toHaveLength(41)
+
+    installApi({ warehouseTubes: warehouseNow })
+    seedStore('completed', warehouseNow)
+    useExperimentStore.setState({ experiments: [experiment] })
+
+    const writerCalls: Array<{ explicitDelete?: boolean | string[] }> = []
+    setWarehouseWriter(async options => {
+      writerCalls.push({ explicitDelete: options?.explicitDelete })
+      return { ok: true }
+    })
+
+    await expect(useExperimentStore.getState().revertExperiment('exp-wide')).resolves.toBe(true)
+
+    const after = useWarehouseStore.getState().tubes
+    expect(after).toHaveLength(41)
+    // 期间新增的两根还在，内容一个字没动
+    expect(after.find(item => item.id === 'n-1')).toMatchObject({ name: '别人新加的A', remainingVolume: 500 })
+    expect(after.find(item => item.id === 'n-2')).toMatchObject({ name: '别人新加的B', remainingVolume: 600 })
+    // 本工程用掉的三根：10 + 20 + 30 → 回到 200
+    expect(after.find(item => item.id === 'r-1')!.remainingVolume).toBe(200)
+    expect(after.find(item => item.id === 'r-2')!.remainingVolume).toBe(200)
+    expect(after.find(item => item.id === 'r-3')!.remainingVolume).toBe(200)
+    // 其余 36 根原样
+    for (let i = 4; i <= 39; i += 1) {
+      expect(after.find(item => item.id === `r-${i}`)!.remainingVolume).toBe(200)
+    }
+    // 没有任何一根被删 → 不给显式删除白名单
+    expect(writerCalls).toHaveLength(1)
+    expect(writerCalls[0].explicitDelete).toBeUndefined()
+  })
+
+  it('只有已完成的工程才能回退：草稿 → 拒绝，一个文件都不写', async () => {
+    seedStore('draft')
+    const api = installApi()
+    const writer = vi.fn(async () => ({ ok: true }))
+    setWarehouseWriter(writer)
+
+    await expect(useExperimentStore.getState().revertExperiment('exp-1')).resolves.toBe(false)
+
+    expect(writer).toHaveBeenCalledTimes(0)
+    expect(api.writeProject).toHaveBeenCalledTimes(0)
+    expect(api.updateTube).toHaveBeenCalledTimes(0)
+    const toast = api.toasts.join('\n')
+    expect(toast).toContain('回退失败')
+    expect(toast).toContain('只有已完成的工程才能回退')
+  })
+
+  /**
+   * 必修 3：`flushWarehouseWrite` 不抛错，护栏拒绝时返回 `{ ok: false }`。
+   * 以前不看返回值 → 界面说「仓库和数据库都没改」，其实文件停在结算后状态。
+   */
+  it('恢复仓库文件也失败（flush 返回 ok:false）→ 文案不许出现「都没有改」，要说清停在哪个状态', async () => {
+    // warehouseText: null → 读不到原文，只能走 flush 兜底（第二次 flush 被拒）
+    seedStore('completed', [tube({ id: 'r-1', name: 'PBS', type: 'source', remainingVolume: 100 })])
+    const api = installApi({ warehouseText: null, writeProject: async () => ({ ok: false, error: '磁盘满' }) })
+
+    let flushCount = 0
+    setWarehouseWriter(async () => {
+      flushCount += 1
+      if (flushCount === 1) return { ok: true }
+      return { ok: false, message: '条目从 2 条掉到 1 条，像是被截断，已拦下' }
+    })
+
+    await expect(useExperimentStore.getState().revertExperiment('exp-1')).resolves.toBe(false)
+
+    expect(flushCount).toBe(2)
+    const toast = api.toasts.join('\n')
+    expect(toast).toContain('回退失败')
+    expect(toast).not.toContain('都没有改')
+    expect(toast).toContain('仓库文件可能停在回退后的状态')
+    expect(toast).toContain('仓库.yml')
+    expect(toast).toContain('像是被截断')
+    expect(api.deleteTube).toHaveBeenCalledTimes(0)
   })
 })

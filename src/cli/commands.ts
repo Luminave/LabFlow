@@ -27,9 +27,11 @@ import { formatCheckIssues } from '../../src/renderer/src/pages/experimentCheckM
 import {
   LOCK_STALE_MINUTES,
   checkLockRelease,
+  deriveLockOwner,
   formatLockAge,
   lockAgeMinutes,
   lockOwnerLabel,
+  lockOwnedBy,
   lockTargetsProject,
   type AgentLock
 } from '../core/lock'
@@ -533,20 +535,33 @@ export function commandExport(args: ParsedArgs): CommandResult {
 
 // ============================== lock ==============================
 
+/** CLI 默认的 agent 名（加锁/解锁/结算三处必须一致，否则 owner 派生不出来） */
+const DEFAULT_CLI_AGENT = 'codex/墨林'
+
+/**
+ * 这个进程带来的 owner 凭据：`--owner` 优先，其次环境变量 `LABFLOW_LOCK_OWNER`。
+ * 必修 2：pid 跨进程必变，光靠它 `unlock` 永远解不掉自己上的锁。
+ */
+function lockOwnerFlag(args: ParsedArgs): string {
+  return flagString(args.flags, 'owner') || process.env.LABFLOW_LOCK_OWNER || ''
+}
+
 export function commandLock(args: ParsedArgs): CommandResult {
   const root = resolveRoot(flagString(args.flags, 'root'))
   const json = flagBool(args.flags, 'json')
   const sub = args.positionals[0] || 'status'
 
   if (sub === 'unlock') {
-    // 第 2 条：解锁要校验三元组（pid + agent + project 与锁文件一致）。
+    // 第 2 条：解锁要校验归属（owner 凭据，或老锁的 pid + agent + project）。
     // 以前是无条件删——B 能把 A 的锁踢掉，A 还在写文件却没人知道。
     const force = flagBool(args.flags, 'force')
     const lock = readLock(root)
+    const owner = lockOwnerFlag(args)
     const caller = {
       pid: process.pid,
-      agent: flagString(args.flags, 'agent') || 'codex/墨林',
-      project: flagString(args.flags, 'project') || args.positionals[1]
+      agent: flagString(args.flags, 'agent') || DEFAULT_CLI_AGENT,
+      project: flagString(args.flags, 'project') || args.positionals[1],
+      owner
     }
     const check = checkLockRelease(lock, caller, { force })
     if (!check.ok) {
@@ -557,15 +572,19 @@ export function commandLock(args: ParsedArgs): CommandResult {
           json: { ok: false, released: false, reason: check.reason, lock }
         }
       }
-      return {
-        code: EXIT_FINDINGS,
-        text: `${check.reason}\n（确认要删就加 --force：labflow unlock --force）`
-      }
+      const hint =
+        lock && !('broken' in lock) && lock.owner
+          ? `\n（这把锁的 owner 凭据是 ${lock.owner}；带上 --owner ${lock.owner} 或设环境变量 LABFLOW_LOCK_OWNER 就能解，确认要硬删再加 --force）`
+          : '\n（确认要删就加 --force：labflow unlock --force）'
+      return { code: EXIT_FINDINGS, text: `${check.reason}${hint}` }
     }
     removeLock(root)
     const holder = lock && !('broken' in lock) ? lockOwnerLabel(lock) : ''
-    if (json) return { code: EXIT_OK, text: '', json: { ok: true, released: true, force, holder } }
-    return { code: EXIT_OK, text: `已解锁（${path.join(root, '.agent-lock')}）${force && holder ? `；强制删掉了 ${holder} 的锁` : ''}` }
+    if (json) return { code: EXIT_OK, text: '', json: { ok: true, released: true, force, holder, owner } }
+    return {
+      code: EXIT_OK,
+      text: `已解锁（${path.join(root, '.agent-lock')}）${force && holder ? `；强制删掉了 ${holder} 的锁` : ''}`
+    }
   }
 
   if (sub === 'status' || sub === '') {
@@ -590,16 +609,23 @@ export function commandLock(args: ParsedArgs): CommandResult {
         ? new Date(Date.now() - minutes * 60 * 1000).toISOString()
         : new Date().toISOString()
 
+    const agent = flagString(args.flags, 'agent') || DEFAULT_CLI_AGENT
+    // 必修 2：除了 pid，再记一个与进程无关的 owner 凭据，跨进程才认得出「这是自己上的锁」
+    const owner = lockOwnerFlag(args) || deriveLockOwner(agent, startedAt)
     const lock = {
       pid: process.pid,
-      agent: flagString(args.flags, 'agent') || 'codex/墨林',
+      agent,
       project,
       note: flagString(args.flags, 'note') || '',
-      startedAt
+      startedAt,
+      owner
     }
     writeLock(root, lock)
     if (json) return { code: EXIT_OK, text: '', json: { ok: true, lock } }
-    return { code: EXIT_OK, text: `已加锁：${lock.project}（${path.join(root, '.agent-lock')}）` }
+    return {
+      code: EXIT_OK,
+      text: `已加锁：${lock.project}（${path.join(root, '.agent-lock')}）\nowner：${owner}\n（解锁/结算时带上 --owner ${owner}，或设 LABFLOW_LOCK_OWNER=${owner}；换进程也认得出这是自己的锁）`
+    }
   }
 
   return usage(`未知的锁子命令：${sub}（可用：lock / unlock / status）`)
@@ -701,10 +727,12 @@ export function commandComplete(args: ParsedArgs): CommandResult {
   }
 
   // 第 1 条：本工程被 Agent 锁着 → 一个文件都不写（退出码 1，中文原因）
+  // 必修 2：锁是自己上的（owner 凭据对得上，跨进程也算）就放行，不然 Agent 结算会被自己的锁挡住
   const agentLock = readLock(root)
   if (agentLock && !('broken' in agentLock)) {
     const mine = lockTargetsProject(agentLock, { id: project.experiment.id, name: project.experiment.name })
-    if (mine) {
+    const selfOwned = mine && lockOwnedBy(agentLock, lockOwnerFlag(args))
+    if (mine && !selfOwned) {
       const holder = lockOwnerLabel(agentLock)
       if (json) {
         return {
@@ -715,7 +743,7 @@ export function commandComplete(args: ParsedArgs): CommandResult {
       }
       return {
         code: EXIT_FINDINGS,
-        text: `拒绝写入：工程「${project.experiment.name}」正被 Agent 锁着（${holder}），已暂缓写入，一个文件都没改。\n等它解锁（labflow unlock --force）后再重跑本次结算。`
+        text: `拒绝写入：工程「${project.experiment.name}」正被 Agent 锁着（${holder}），已暂缓写入，一个文件都没改。\n等它解锁（labflow unlock --force）后再重跑本次结算；若这把锁是本次 Agent 自己上的，带上 --owner <加锁时输出的凭据>（或设 LABFLOW_LOCK_OWNER）即可放行。`
       }
     }
   }

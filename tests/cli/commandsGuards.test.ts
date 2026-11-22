@@ -157,12 +157,42 @@ describe('unlock：校验不过就不许删（第 2 条）', () => {
     expect(fs.existsSync(lockFile())).toBe(false)
   })
 
-  it('自己的锁（同 pid + 同 agent）→ 不带 --force 也能解', () => {
+  /**
+   * 必修 2：以前这里是「同 pid + 同 agent 就能解」——同进程跑的，属于假通过。
+   * 真实使用里 unlock 是**另一个进程**，pid 必然不同，所以永远解不掉自己的锁。
+   * 现在锁里带一个与进程无关的 owner 凭据：显式传 caller（只带 owner、不带 pid）才代表「跨进程」。
+   */
+  it('自己的锁（同 owner 凭据，模拟换了个进程）→ 不带 --force 也能解', () => {
+    setupRoot()
+    const created = lock(['lock', '--project', '闸门工程', '--agent', 'codex/墨林', '--json'])
+    const owner = (created.json as { lock: { owner: string } }).lock.owner
+    expect(owner).toMatch(/^owner-[0-9a-f]{8}$/)
+
+    // 只带 owner 凭据：pid 是「加锁那次进程」的，这里根本不指望它相等
+    expect(lock(['unlock', '--agent', 'codex/墨林', '--owner', owner]).code).toBe(0)
+    expect(fs.existsSync(lockFile())).toBe(false)
+  })
+
+  it('别的 agent 拿着自己的 owner 凭据 → 解不掉（跨 owner 不可互删）', () => {
     setupRoot()
     lock(['lock', '--project', '闸门工程', '--agent', 'codex/墨林'])
 
-    expect(lock(['unlock', '--agent', 'codex/墨林']).code).toBe(0)
-    expect(fs.existsSync(lockFile())).toBe(false)
+    const result = lock(['unlock', '--agent', 'codex/别人', '--owner', 'owner-deadbeef'])
+    expect(result.code).toBe(1)
+    expect(result.text).toContain('owner 凭据对不上')
+    expect(result.text).toContain('--force')
+    expect(fs.existsSync(lockFile())).toBe(true)
+  })
+
+  it('不认凭据也不 --force → 拒绝，并把这把锁的 owner 说出来（以前只报 pid 不一致）', () => {
+    setupRoot()
+    const created = lock(['lock', '--project', '闸门工程', '--agent', 'codex/墨林', '--json'])
+    const owner = (created.json as { lock: { owner: string } }).lock.owner
+
+    const result = lock(['unlock', '--agent', 'codex/墨林'])
+    expect(result.code).toBe(1)
+    expect(result.text).toContain(owner)
+    expect(fs.existsSync(lockFile())).toBe(true)
   })
 })
 
@@ -255,6 +285,28 @@ describe('complete --apply：工程被锁着就不写（第 1 条）', () => {
     expect(payload.ok).toBe(false)
     expect(payload.locked).toBe(true)
     expect(payload.holder).toContain('codex/墨林')
+  })
+
+  /** 必修 2：Agent 上锁 → 自己跑 complete --apply，以前一定被自己的锁挡住 */
+  it('锁是自己上的（带 owner 凭据）→ 放行，正常结算', () => {
+    setupRoot()
+    const created = lock(['lock', '--project', '闸门工程', '--agent', 'codex/墨林', '--json'])
+    const owner = (created.json as { lock: { owner: string } }).lock.owner
+
+    const result = complete(['complete', '闸门工程', '--apply', '--owner', owner])
+    expect(result.code).toBe(0)
+    expect(fs.readFileSync(projectPath(), 'utf8')).toContain('status: completed')
+  })
+
+  it('锁是别人上的（owner 对不上）→ 照样挡住', () => {
+    setupRoot()
+    lock(['lock', '--project', '闸门工程', '--agent', 'codex/别人'])
+    const before = fs.statSync(warehousePath()).mtimeMs
+
+    const result = complete(['complete', '闸门工程', '--apply', '--owner', 'owner-deadbeef'])
+    expect(result.code).toBe(1)
+    expect(result.text).toContain('正被 Agent 锁着')
+    expect(fs.statSync(warehousePath()).mtimeMs).toBe(before)
   })
 })
 

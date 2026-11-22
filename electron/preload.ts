@@ -138,4 +138,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('deeplink:open', handler)
     }
   },
+
+  /**
+   * 深链接：主动取一次「待处理」的链接（取走即清空，没有则 null）。
+   * 冷启动时主进程的 push 可能比渲染层订阅更早，只有这一条能兜住。
+   */
+  takePendingProjectLink: (): Promise<string | null> => ipcRenderer.invoke('deeplink:take-pending'),
 })

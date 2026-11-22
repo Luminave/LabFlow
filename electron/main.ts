@@ -42,10 +42,11 @@ import {
 // `labflow://` 深链接（从笔记里点链接直接打开工程）
 import {
   deliverDeepLink,
-  flushPendingDeepLink,
   initialDeepLink,
   registerDeepLinkProtocol,
-  setupDeepLinkHandlers
+  resetRendererReady,
+  setupDeepLinkHandlers,
+  takePendingDeepLink
 } from './deepLink'
 
 // sql.js 是 CJS 模块，需要使用 require 导入
@@ -476,10 +477,15 @@ async function createWindow() {
     if (retry === 0) mainWindow?.loadURL('http://localhost:5173')
   })
 
-  // 页面加载完再补发「启动时就点着链接进来的那一次」，避免渲染进程错过事件
+  // 页面开始（重新）加载：渲染层要重新订阅，之前「可以收推送」的状态作废，
+  // 这期间的链接改走 pending + 渲染层拉取
+  mainWindow.webContents.on('did-start-loading', () => {
+    resetRendererReady()
+  })
+
+  // 页面加载完把当前锁推一次，界面不用等下一次文件变化
+  // （深链接不再在这里抢发：冷启动统一由渲染层挂载后 take，见 electron/deepLink.ts）
   mainWindow.webContents.on('did-finish-load', () => {
-    flushPendingDeepLink()
-    // 窗口加载好后把当前锁推一次，界面不用等下一次文件变化
     mainWindow?.webContents.send('lock:changed', readAgentLock())
   })
 
@@ -510,12 +516,14 @@ if (primaryInstance) {
   app.whenReady().then(async () => {
     // 注册 labflow:// 协议（开发模式要带 electron 可执行文件 + 脚本路径，打包后不用带）
     registerDeepLinkProtocol()
-    await createWindow()
-    startLockWatch()
 
-    // 首次启动时 argv 里就带着链接（Windows 下点链接会新起一个实例再转交）
+    // 首次启动时 argv 里就带着链接（Windows 下点链接会新起一个实例再转交）。
+    // 先塞进待处理槽、再建窗口：这样渲染层无论多晚来取，链接都一定还在。
     const launchLink = initialDeepLink()
     if (launchLink) deliverDeepLink(launchLink)
+
+    await createWindow()
+    startLockWatch()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -534,6 +542,9 @@ app.on('window-all-closed', () => {
 // ==================== IPC Handlers ====================
 
 ipcMain.handle('get-app-path', () => app.getPath('userData'))
+
+// 深链接：渲染层挂载完订阅后主动来取一次（冷启动时 push 那一次可能早于订阅，只有拉才稳）
+ipcMain.handle('deeplink:take-pending', () => takePendingDeepLink())
 
 // 试管操作
 ipcMain.handle('db:getTubes', async () => {

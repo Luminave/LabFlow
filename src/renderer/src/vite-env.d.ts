@@ -190,6 +190,8 @@ interface ElectronAPI {
   captureBoard?: (rect: { x: number; y: number; width: number; height: number }) => Promise<string | null>
   /** 深链接（labflow://）：笔记里点链接时主进程推过来；返回取消订阅函数 */
   onOpenProject?: (callback: (url: string) => void) => () => void
+  /** 深链接：主动取一次待处理链接（取走即清空，没有则 null）——冷启动靠它兜底 */
+  takePendingProjectLink?: () => Promise<string | null>
   /** Agent 锁（第 2 步）：读当前锁、强制解锁、订阅变化 */
   getAgentLock?: () => Promise<ParsedAgentLockPayload>
   forceReleaseAgentLock?: (payload?: {

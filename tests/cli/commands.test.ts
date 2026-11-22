@@ -315,21 +315,28 @@ describe('cli export', () => {
 // ------------------------------------------------------------------ lock
 
 describe('cli lock', () => {
+  /** 加锁时输出的 owner 凭据（必修 2：解锁靠它，不靠 pid） */
+  function lockAndGetOwner(argv: string[]): string {
+    const result = run([...argv, '--json'])
+    expect(result.code).toBe(0)
+    return (result.json as { lock: { owner: string } }).lock.owner
+  }
+
   it('lock → status → unlock 三步走', () => {
-    expect(run(['lock', '--project', '演示工程', '--note', '改浓度']).code).toBe(0)
+    const owner = lockAndGetOwner(['lock', '--project', '演示工程', '--note', '改浓度'])
     const status = run(['status', '--json'])
     const json = status.json as { lock: { project: string; note: string } }
     expect(json.lock.project).toBe('演示工程')
     expect(json.lock.note).toBe('改浓度')
 
-    expect(run(['unlock']).code).toBe(0)
+    expect(run(['unlock', '--owner', owner]).code).toBe(0)
     expect((run(['status']).text as string)).toContain('没有锁')
   })
 
   it('--minutes 16 造出「可能忘记解锁了」', () => {
-    run(['lock', '--project', '演示工程', '--minutes', '16'])
+    const owner = lockAndGetOwner(['lock', '--project', '演示工程', '--minutes', '16'])
     expect(run(['status']).text).toContain('可能忘记解锁了')
-    run(['unlock'])
+    run(['unlock', '--owner', owner])
   })
 
   it('缺 --project 返回 2', () => {

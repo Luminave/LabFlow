@@ -14,7 +14,7 @@ import {
 import { Experiment, Tube, TransferConnection, TubePosition, Substance, VolumeUnit } from '@shared/types'
 import { roundVolume } from '@shared/utils/calculations'
 import { computeEndState } from '@/core/endState'
-import { MissingReagentRefError, mergeWarehouseBase, settleExperiment } from '@/core/settle'
+import { MissingReagentRefError, mergeWarehouseBase, revertExperimentUsage, settleExperiment } from '@/core/settle'
 import { useWarehouseStore } from './warehouseStore'
 import { flushWarehouseWrite } from '../utils/warehouseWriteQueue'
 import { loadWarehouseFile, restoreWarehouseContent } from '../utils/warehouseSource'
@@ -1349,14 +1349,23 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         useWarehouseStore.getState().setTubes(warehouseBefore)
         // 回滚要用**原文**：走护栏重写会被当成「非显式删除」拒掉，文件就停在结算后状态了
         let restored = false
+        // 恢复失败的真实原因要写进提示里，不然用户只知道「没恢复」，不知道卡在哪
+        let restoreFailure = ''
         if (warehouseFileText !== undefined) restored = await restoreWarehouseContent(warehouseFileText)
         if (!restored) {
           // 拿不到原文（仓库文件本来不存在 / 没有桌面正本）→ 退回「按内存重写一遍」
+          // 必修 3：flushWarehouseWrite 不抛错，护栏拒绝/冲突时返回 { ok: false }，必须看返回值
           try {
-            await flushWarehouseWrite()
-            restored = true
+            const fallback = await flushWarehouseWrite()
+            restored = fallback.ok
+            if (!restored) {
+              restoreFailure = fallback.message || '未知原因'
+              console.error('[completeExperiment] 恢复仓库文件失败：', restoreFailure)
+            }
           } catch (restoreError) {
-            console.error('[completeExperiment] 恢复仓库文件失败：', restoreError)
+            restored = false
+            restoreFailure = (restoreError as Error).message
+            console.error('[completeExperiment] 恢复仓库文件异常：', restoreError)
           }
         }
         const reason = error instanceof ProjectFileConflictError ? '工程文件已被外部修改' : (error as Error).message
@@ -1364,7 +1373,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         fail(
           restored
             ? `工程正本没能写成（${reason}），本次结算没有落地：仓库和数据库都没改`
-            : `工程正本没能写成（${reason}），仓库文件可能还停在结算后的状态，请打开 仓库.yml 核对（数据库没改）`
+            : `工程正本没能写成（${reason}），仓库文件可能还停在结算后的状态，请检查 仓库.yml（数据库没改；恢复仓库文件也失败了：${restoreFailure || '未知原因'}）`
         )
       }
 
@@ -1435,13 +1444,23 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   
   revertExperiment: async (experimentId) => {
     const experiment = get().experiments.find(e => e.id === experimentId)
-    if (!experiment || !experiment.warehouseSnapshot) {
-      alert('无法回退：缺少仓库快照')
+    if (!experiment) {
+      notifyRevertFailed('找不到这个工程')
+      return false
+    }
+
+    /**
+     * 必修 1（守卫，2026-11-23）：只有「已完成（结算过）」的工程才谈得上回退。
+     * 回退的全部依据是「结算时扣掉了哪些量」，草稿工程没有这笔账，硬跑只会把仓库改坏。
+     * HistoryPage 的拦截只在「还存在更晚的已完成工程」时生效，不能依赖它。
+     */
+    if (experiment.status !== 'completed') {
+      const label = experiment.status === 'draft' ? '草稿' : experiment.status
+      notifyRevertFailed(`「${experiment.name}」现在是「${label}」状态，只有已完成的工程才能回退`)
       return false
     }
 
     console.log('[revertExperiment] Reverting experiment:', experimentId)
-    console.log('[revertExperiment] Warehouse snapshot:', experiment.warehouseSnapshot.length, 'tubes')
 
     // 第 1 条：被 Agent 锁住 → 一个文件都不写
     try {
@@ -1452,7 +1471,6 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       return false
     }
 
-    const snapshot = experiment.warehouseSnapshot.map(tube => ({ ...tube }))
     // 第 5 条：回退后的工程状态回到 draft（以前写的是 'reverted'，界面还当只读，等于回退没回干净）
     const revertedExperiment: Experiment = {
       ...experiment,
@@ -1462,25 +1480,20 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       updatedAt: new Date().toISOString()
     }
 
-    // 获取当前仓库状态
-    const currentWarehouseTubes = await getWarehouseTubes()
-    console.log('[revertExperiment] Current warehouse:', currentWarehouseTubes.length, 'tubes')
-
-    // 找出需要删除的中间产物（不在快照中的试管）
-    const snapshotIds = new Set(snapshot.map(t => t.id))
-    const tubesToDelete = currentWarehouseTubes.filter(t => !snapshotIds.has(t.id))
-    console.log('[revertExperiment] Tubes to delete:', tubesToDelete.map(t => t.name))
-
     /**
      * 第 5 条：回退也要走「先算 → 两个正本文件都写成功 → 再改数据库与内存」。
-     *
      * 以前这里只改数据库和内存，`仓库.yml` / 工程 yml 一个字都没动：
      * 重启后热加载按文件为准，刚回退掉的试剂量又回来了——等于白回退。
+     *
+     * 必修 1（2026-11-23）：基底换成**当前**仓库，不再用 `experiment.warehouseSnapshot`。
+     * 快照只在建工程那一刻记一次，拿它整份覆盖会把建工程之后的所有变化（别的工程结算、
+     * 新加的试剂）一起抹掉。口径与 completeExperiment 完全一致：仓库.yml 的顺序当骨架、
+     * 内存里同 id 的条目覆盖、内存新增追加；两者都空才退回数据库。
      */
     const warehouseBefore = useWarehouseStore.getState().tubes
+    let warehouseBase: Tube[]
     let warehouseFileText: string | undefined
     if (window.electronAPI) {
-      // ① 先写 仓库.yml：回退一定让仓库条目变少，必须显式标成「这是我知道的删除」，否则被截断护栏拒掉
       const read = await loadWarehouseFile()
       if (read.state === 'broken') {
         const reason = read.error || read.warnings[0] || '内容无法解析'
@@ -1488,9 +1501,33 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         return false
       }
       warehouseFileText = read.state === 'ok' ? read.text : undefined
+      const warehouseFromFile = read.state === 'ok' && read.snapshot ? read.snapshot.reagents : []
+      warehouseBase = mergeWarehouseBase(warehouseFromFile, warehouseBefore)
+      if (warehouseBase.length === 0) warehouseBase = await getWarehouseTubes()
+    } else {
+      warehouseBase = await getWarehouseTubes()
+    }
 
-      useWarehouseStore.getState().setTubes(snapshot)
-      const flushed = await flushWarehouseWrite({ explicitDelete: true })
+    // 只把本工程结算时扣掉的量加回去（core 纯函数，与 settleExperiment 对称）
+    const reverted = revertExperimentUsage(
+      { experiment, warehouse: warehouseBase },
+      { now: () => new Date().toISOString() }
+    )
+    console.log(
+      '[revertExperiment] 加回',
+      reverted.restored.length,
+      '根试剂，删掉',
+      reverted.deleteIds.length,
+      '根本工程入仓的中间产物，跳过',
+      reverted.skipped.length,
+      '根'
+    )
+
+    if (window.electronAPI) {
+      // ① 先写 仓库.yml；只放行本工程新入仓那几根的删除，其余条目一律不许少
+      useWarehouseStore.getState().setTubes(reverted.warehouseAfter)
+      const flushOptions = reverted.deleteIds.length > 0 ? { explicitDelete: reverted.deleteIds } : undefined
+      const flushed = await flushWarehouseWrite(flushOptions)
       if (!flushed.ok) {
         // 冲突时内存已被重读的文件内容替换（不再回滚）；其它失败恢复内存
         if (!flushed.conflict) useWarehouseStore.getState().setTubes(warehouseBefore)
@@ -1504,14 +1541,25 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       } catch (error) {
         useWarehouseStore.getState().setTubes(warehouseBefore)
         let restored = false
+        let restoreFailure = ''
         if (warehouseFileText !== undefined) restored = await restoreWarehouseContent(warehouseFileText)
         if (!restored) {
-          // 拿不到原文（仓库文件本来不存在）→ 退回「按内存重写一遍」
+          /**
+           * 必修 3（2026-11-23）：`flushWarehouseWrite` **不抛错**，护栏拒绝 / 内容冲突时
+           * 返回 `{ ok: false }`。以前这里不看返回值就 `restored = true`，于是界面谎报
+           * 「仓库和数据库都没改」，而文件其实停在回退后的状态——用户重跑会二次扣减。
+           */
           try {
-            await flushWarehouseWrite()
-            restored = true
+            const fallback = await flushWarehouseWrite()
+            restored = fallback.ok
+            if (!restored) {
+              restoreFailure = fallback.message || '未知原因'
+              console.error('[revertExperiment] 恢复仓库文件失败：', restoreFailure)
+            }
           } catch (restoreError) {
-            console.error('[revertExperiment] 恢复仓库文件失败：', restoreError)
+            restored = false
+            restoreFailure = (restoreError as Error).message
+            console.error('[revertExperiment] 恢复仓库文件异常：', restoreError)
           }
         }
         const reason = error instanceof ProjectFileConflictError ? '工程文件已被外部修改' : (error as Error).message
@@ -1519,7 +1567,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         notifyRevertFailed(
           restored
             ? `工程正本没能写成（${reason}），这次回退没有落地：仓库和数据库都没改`
-            : `工程正本没能写成（${reason}），仓库文件可能还停在回退后的状态，请打开 仓库.yml 核对（数据库没改）`
+            : `工程正本没能写成（${reason}），仓库文件可能停在回退后的状态，请检查 仓库.yml（数据库没改；恢复仓库文件也失败了：${restoreFailure || '未知原因'}）`
         )
         return false
       }
@@ -1528,17 +1576,29 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     // ③ 两个文件都成了，才动数据库与内存
     try {
       if (window.electronAPI) {
-        // 先把多出来的中间产物从仓库删掉，再按快照把余量写回数据库
-        for (const tube of tubesToDelete) {
-          console.log('[revertExperiment] Deleting tube:', tube.id, tube.name)
-          await window.electronAPI.deleteTube(tube.id)
+        // 先删本工程新入仓的中间产物，再把加回去的余量写回数据库
+        for (const tubeId of reverted.deleteIds) {
+          console.log('[revertExperiment] Deleting tube:', tubeId)
+          await window.electronAPI.deleteTube(tubeId)
         }
-        await saveWarehouseTubes(snapshot)
-        console.log('[revertExperiment] Warehouse restored to snapshot')
+        for (const tube of reverted.updated) {
+          await window.electronAPI.updateTube({
+            id: tube.id,
+            name: tube.name,
+            type: tube.type,
+            totalVolume: tube.totalVolume,
+            totalVolumeUnit: tube.totalVolumeUnit,
+            remainingVolume: tube.remainingVolume,
+            remainingVolumeUnit: tube.remainingVolumeUnit,
+            substances: tube.substances,
+            updatedAt: tube.updatedAt,
+            status: tube.status
+          })
+        }
+        console.log('[revertExperiment] Warehouse restored: +', reverted.restored.length, 'tubes')
       } else {
-        // localStorage 降级：快照直接顶掉整份仓库
-        localStorage.setItem('labflow_tubes', JSON.stringify(snapshot))
-        console.log('[revertExperiment] Using localStorage, snapshot already saved')
+        // localStorage 降级：回退后的仓库整份写回
+        localStorage.setItem('labflow_tubes', JSON.stringify(reverted.warehouseAfter))
       }
     } catch (error) {
       console.error('[revertExperiment] 恢复仓库数据库失败：', error)
@@ -1593,6 +1653,21 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     } catch (error) {
       console.warn('[revertExperiment] 数据库缓存写失败（正本已回退）：', error)
       notifyToast('实验已回退、正本文件已写好；数据库缓存没写成功，重开应用会按文件重读')
+    }
+
+    // 必修 1：只加回本工程用到的量，其余条目原样不动——跳过的必须说清楚，不能悄悄放过
+    if (reverted.skipped.length > 0) {
+      notifyToast(
+        `回退完成，但这 ${reverted.skipped.length} 根没动：${reverted.skipped
+          .map(item => `${item.name}（${item.reason}）`)
+          .join('；')}`
+      )
+    } else if (reverted.restored.length > 0 || reverted.removedCreatedTubes.length > 0) {
+      notifyToast(
+        `已回退「${experiment.name}」：加回 ${reverted.restored.length} 根试剂的体积${
+          reverted.removedCreatedTubes.length > 0 ? `，删掉 ${reverted.removedCreatedTubes.length} 根本工程入仓的中间产物` : ''
+        }`
+      )
     }
 
     console.log('[revertExperiment] Experiment reverted successfully')

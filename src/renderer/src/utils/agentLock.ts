@@ -8,7 +8,7 @@
  * 锁的解析与匹配复用 src/core/lock.ts，这里只负责「读锁 + 抛错 + 轻提示」。
  */
 
-import { lockOwnerLabel, lockTargetsProject, type AgentLock, type ParsedAgentLock } from '@/core/lock'
+import { lockOwnerLabel, lockOwnedBy, lockTargetsProject, type AgentLock, type ParsedAgentLock } from '@/core/lock'
 
 export interface ProjectRef {
   id?: string
@@ -48,10 +48,20 @@ export async function readProjectLock(project: ProjectRef = {}): Promise<AgentLo
   return lockTargetsProject(lock, { id: project.id, name: project.name }) ? lock : null
 }
 
-/** 本工程被锁就抛 AgentLockError；没锁直接过 */
-export async function assertProjectWritable(project: ProjectRef = {}): Promise<void> {
+/**
+ * 本工程被锁就抛 AgentLockError；没锁直接过。
+ *
+ * 必修 2：可选带一个 owner 凭据——锁是**自己上的**（凭据对得上）就放行，
+ * 不然 Agent「上锁 → 自己结算」永远被自己的锁挡住。界面上没人带凭据，行为不变。
+ */
+export async function assertProjectWritable(
+  project: ProjectRef = {},
+  owner?: string | null
+): Promise<void> {
   const lock = await readProjectLock(project)
-  if (lock) throw new AgentLockError(lock)
+  if (!lock) return
+  if (lockOwnedBy(lock, owner)) return
+  throw new AgentLockError(lock)
 }
 
 let lastDeferredKey = ''
