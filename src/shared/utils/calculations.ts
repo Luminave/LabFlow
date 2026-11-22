@@ -1,60 +1,26 @@
 /**
  * 浓度和体积计算工具
+ *
+ * 单位表与归一化函数已统一搬到计算内核（src/core/units.ts），这里只做转发，
+ * 保证全仓库只有一份单位表。新代码请直接用 `@/core/units`。
  */
 
 import { Substance, Tube, CalculationRequest, CalculationResult, VolumeUnit } from '../types'
+import { computeMixture } from '../../core/mix'
+import { normalizeVolume, denormalizeVolume } from '../../core/units'
 
-/**
- * 将体积四舍五入到指定小数位，避免浮点精度问题
- * @param volume 体积值
- * @param decimals 小数位数，默认 3
- */
-export function roundVolume(volume: number, decimals: number = 3): number {
-  if (!isFinite(volume)) return volume
-  const factor = Math.pow(10, decimals)
-  return Math.round(volume * factor) / factor
-}
-
-/**
- * 浓度单位转换因子 (统一转换为 μM)
- */
-const CONCENTRATION_FACTORS: Record<string, number> = {
-  'nM': 0.001,
-  'μM': 1,
-  'mM': 1000,
-  'M': 1000000
-}
-
-/**
- * 体积单位转换因子 (统一转换为 μL)
- */
-const VOLUME_FACTORS: Record<string, number> = {
-  'nL': 0.001,
-  'μL': 1,
-  'mL': 1000,
-  'L': 1000000
-}
-
-/**
- * 将浓度转换为标准单位 (μM)
- */
-export function normalizeConcentration(value: number, unit: string): number {
-  return value * (CONCENTRATION_FACTORS[unit] || 1)
-}
-
-/**
- * 将体积转换为标准单位 (μL)
- */
-export function normalizeVolume(value: number, unit: string): number {
-  return value * (VOLUME_FACTORS[unit] || 1)
-}
-
-/**
- * 从标准单位转换回指定单位
- */
-export function denormalizeVolume(value: number, unit: string): number {
-  return value / (VOLUME_FACTORS[unit] || 1)
-}
+// 单位表与归一化工具的唯一实现：src/core/units.ts
+export {
+  CONCENTRATION_FACTORS,
+  VOLUME_FACTORS,
+  concentrationFactor,
+  volumeFactor,
+  normalizeConcentration,
+  normalizeVolume,
+  denormalizeVolume,
+  denormalizeConcentration,
+  roundVolume
+} from '../../core/units'
 
 /**
  * 计算从源试管取出指定体积后，目标试管中的物质浓度
@@ -94,9 +60,9 @@ export function checkVolumeAvailability(
 ): { available: boolean; shortage: number } {
   const normalizedRemaining = normalizeVolume(tube.remainingVolume, tube.remainingVolumeUnit)
   const normalizedRequired = normalizeVolume(requiredVolume, volumeUnit)
-  
+
   const shortage = normalizedRequired - normalizedRemaining
-  
+
   return {
     available: shortage <= 0,
     shortage: Math.max(0, denormalizeVolume(shortage, tube.remainingVolumeUnit))
@@ -106,6 +72,7 @@ export function checkVolumeAvailability(
 /**
  * 执行混合计算
  * 给定多个源试管和要取出的体积，计算混合后的物质浓度
+ * 实现已收到计算内核（src/core/mix.ts）：先归一到 μM·μL 再算，结果一律 μM。
  */
 export function calculateMixture(
   sources: {
@@ -114,43 +81,14 @@ export function calculateMixture(
     volumeUnit: VolumeUnit
   }[]
 ): Substance[] {
-  const substanceMap = new Map<string, { totalMoles: number; unit: string }>()
-  let totalVolume = 0
-  
-  for (const source of sources) {
-    const normalizedVolume = normalizeVolume(source.volume, source.volumeUnit)
-    totalVolume += normalizedVolume
-    
-    for (const substance of source.tube.substances) {
-      const normalizedConc = normalizeConcentration(substance.concentration, substance.concentrationUnit)
-      const moles = normalizedConc * normalizedVolume // μM × μL = pmol
-      
-      const existing = substanceMap.get(substance.name)
-      if (existing) {
-        existing.totalMoles += moles
-      } else {
-        substanceMap.set(substance.name, {
-          totalMoles: moles,
-          unit: substance.concentrationUnit
-        })
-      }
-    }
-  }
-  
-  if (totalVolume === 0) return []
-  
-  // 计算最终浓度
-  const result: Substance[] = []
-  substanceMap.forEach((data, name) => {
-    const concentration = data.totalMoles / totalVolume // pmol / μL = μM
-    result.push({
-      name,
-      concentration: Math.round(concentration * 1000) / 1000, // 保留3位小数
-      concentrationUnit: 'μM' as const
-    })
-  })
-  
-  return result
+  return computeMixture(
+    sources.map(source => ({
+      substances: source.tube.substances,
+      volume: source.volume,
+      volumeUnit: source.volumeUnit
+    })),
+    { unitMode: 'uM', decimals: 3 }
+  ) as Substance[]
 }
 
 /**
@@ -223,7 +161,7 @@ export function performCalculation(
   let bufferVolume: number | undefined
   if (request.targetVolume && request.allowBufferFill) {
     const totalSourceVolume = request.sourceTubes.reduce((sum, s) => sum + (s.volume || 0), 0)
-    const targetVol = normalizeVolume(request.targetVolume, 'μL')
+      const targetVol = normalizeVolume(request.targetVolume, 'μL')
     const sourceVol = normalizeVolume(totalSourceVolume, 'μL')
     
     if (targetVol > sourceVol) {

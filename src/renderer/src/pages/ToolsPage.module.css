@@ -1,46 +1,76 @@
 .container {
-  padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
+  /* 统一页面骨架：不居中、不限宽，标题与内容同一左边界（与试剂仓库一致） */
+  width: 100%;
+  max-width: 1600px;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .header {
-  padding: var(--spacing-lg);
+  padding: 24px 32px;
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-color);
-  margin-bottom: var(--spacing-lg);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.25;
   color: var(--text-primary);
-  margin: 0 0 8px 0;
+  margin: 0;
 }
 
 .subtitle {
+  /* 黄色提示条：与内容区同宽，跟在标题下方 */
+  align-self: stretch;
   font-size: 13px;
   color: var(--warning-color);
   margin: 0;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: #fffbeb;
   border: 1px solid #fde68a;
-  border-radius: 6px;
+  border-radius: 8px;
+  box-sizing: border-box;
 }
 
 .content {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  width: 100%;
+  padding: 24px 32px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 内容区是纵向 flex，且外层固定高度：子块一律不许被压扁（否则卡片互相叠压） */
+.content > * {
+  flex-shrink: 0;
 }
 
 /* 工具卡片 */
 .toolCard {
-  background: white;
-  border: 1px solid #e2e8f0;
+  /* 卡片跟随内容区宽度、左对齐；超宽屏最多 1200px，仍然不居中 */
+  width: 100%;
+  max-width: 1200px;
+  align-self: flex-start;
+  box-sizing: border-box;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  box-shadow: none;
 }
 
 .toolTitle {

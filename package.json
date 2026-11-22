@@ -14,23 +14,28 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --no-sandbox\"",
-    "electron:build": "npm run build && electron-builder"
+    "electron:build": "npm run build && electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=dist-cli/labflow.mjs --log-level=warning",
+    "labflow": "node dist-cli/labflow.mjs"
   },
   "dependencies": {
+    "@xyflow/react": "^12.0.0",
+    "date-fns": "^3.3.0",
+    "js-yaml": "^4.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
-    "zustand": "^4.5.0",
-    "@xyflow/react": "^12.0.0",
     "sql.js": "^1.10.0",
     "uuid": "^9.0.0",
-    "date-fns": "^3.3.0"
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@types/sql.js": "^1.4.9",
     "@types/node": "^20.11.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/sql.js": "^1.4.9",
     "@types/uuid": "^9.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "concurrently": "^8.2.0",
@@ -40,6 +45,7 @@
     "vite": "^5.0.0",
     "vite-plugin-electron": "^0.28.0",
     "vite-plugin-electron-renderer": "^0.14.0",
+    "vitest": "^2.1.9",
     "wait-on": "^7.2.0"
   },
   "build": {

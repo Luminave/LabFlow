@@ -7,17 +7,25 @@
 }
 
 .header {
-  padding: var(--spacing-lg);
+  /* 统一骨架基准：padding 24/32、标题左对齐、右侧操作区右对齐 */
+  padding: 24px 32px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  /* 顶部对齐：标题不被右侧较高的按钮组挤到中间，四页标题 ink 起点才对得齐 */
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
   background: var(--surface-color);
+  box-sizing: border-box;
 }
 
 .headerButtons {
   display: flex;
-  gap: var(--spacing-sm);
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .toggleHiddenBtn {
@@ -52,7 +60,9 @@
 
 .title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .addButton {
@@ -71,7 +81,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--spacing-lg);
+  padding: 24px 32px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   grid-auto-rows: min-content;

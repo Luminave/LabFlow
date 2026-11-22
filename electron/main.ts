@@ -1,7 +1,37 @@
+import { classifyStoreEvent, createWriteTracker, type StoreChangePayload } from './storeWatcher'
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+
+// 导出设置的默认值与校验规则只有一份，直接在渲染进程/测试用的 core 里取
+// （只引 settings.ts，避免把 js-yaml 带进主进程启动路径）
+import { normalizeExportSettings, type ExportSettings } from '../src/core/exporters/settings'
+import { LOCK_FILENAME, parseAgentLock, type ParsedAgentLock } from '../src/core/lock'
+// 数据正本目录（第 1 步：正本是 yml，数据库降为缓存）
+import {
+  DEFAULT_DATA_ROOT,
+  ensureDataRoot,
+  exportDir,
+  listProjectFiles,
+  projectDir,
+  readProjectFile,
+  readTextFile,
+  resolveProjectPath,
+  statFile,
+  warehousePath,
+  writeDerivedFiles,
+  writeFileAtomic,
+  type FileStat
+} from './dataRoot'
+// `labflow://` 深链接（从笔记里点链接直接打开工程）
+import {
+  deliverDeepLink,
+  flushPendingDeepLink,
+  initialDeepLink,
+  registerDeepLinkProtocol,
+  setupDeepLinkHandlers
+} from './deepLink'
 
 // sql.js 是 CJS 模块，需要使用 require 导入
 const initSqlJs = require('sql.js')
@@ -19,6 +49,24 @@ interface LabFlowConfig {
   dbPath?: string       // 数据库文件完整路径
   backupDir?: string    // 备份目录完整路径
   version?: number
+  // 工程导出设置（讲述者页的「导出」用；第 1 步新增）
+  exportDir?: string            // 默认导出目录；空 = 每次都弹选择框
+  exportFileNameTemplate?: string  // 文件名模板，支持 <日期> <工程名>
+  exportAutoSubfolder?: boolean    // 是否按工程名自动建子文件夹
+  exportScaleX?: number            // 画布横向比例（0.5–4.0，步长 0.1），默认 1.6
+  exportScaleY?: number            // 画布纵向比例（0.5–4.0，步长 0.1），默认 1.6
+  // 三个开关（2026-11-22 新增）
+  exportAutoExportOnSave?: boolean // 实验模拟页保存后自动重新导出，默认开
+  exportExportCanvasFile?: boolean // 导出是否写 .canvas，默认开
+  exportExportImage?: boolean      // 导出是否额外画 <工程名>.png，默认开
+  exportExportDataFile?: boolean   // 导出目录里是否再放一份工程 .yml（只当备份，默认关）
+  // 数据正本目录（默认 D:\学习\labflow）；工程/ 仓库/ 导出 都在它下面
+  dataRoot?: string
+  // 老配置的一次性迁移标记：白板开关默认值从「开」改成「关」
+  exportDefaultsV2Migrated?: boolean
+  // @deprecated 旧版像素净空，只在读取老配置时折算成比例
+  exportSpacingX?: number
+  exportSpacingY?: number
 }
 
 const CONFIG_FILENAME = 'labflow.config.json'
@@ -364,6 +412,12 @@ function queryOne(sql: string, params: any[] = []): any | null {
 }
 
 async function createWindow() {
+  // 第二实例绝不建窗口：它只负责把链接转交给主实例，然后立刻退出
+  if (!primaryInstance) {
+    console.log('[DeepLink] 非主实例，跳过创建窗口')
+    return
+  }
+
   try {
     await initDatabase()
     console.log('Database initialized successfully')
@@ -392,6 +446,26 @@ async function createWindow() {
 
   mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
     console.error('Failed to load:', errorCode, errorDescription)
+    if (app.isPackaged) return
+    // 开发模式下最常见的失败是 vite 已经停了（点链接新起的实例会撞上这个），
+    // 直接给一个人看得懂的提示，而不是留一个白窗口
+    const retry = dialog.showMessageBoxSync(mainWindow!, {
+      type: 'warning',
+      title: '开发服务器没连上',
+      message: `打不开 http://localhost:5173（${errorCode} ${errorDescription}）`,
+      detail: '多半是 vite 没起来或者已经退出了。请在项目目录重新执行 npm run electron:dev，然后点「重试」。',
+      buttons: ['重试', '关闭'],
+      defaultId: 0,
+      cancelId: 1
+    })
+    if (retry === 0) mainWindow?.loadURL('http://localhost:5173')
+  })
+
+  // 页面加载完再补发「启动时就点着链接进来的那一次」，避免渲染进程错过事件
+  mainWindow.webContents.on('did-finish-load', () => {
+    flushPendingDeepLink()
+    // 窗口加载好后把当前锁推一次，界面不用等下一次文件变化
+    mainWindow?.webContents.send('lock:changed', readAgentLock())
   })
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
@@ -404,15 +478,37 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(async () => {
-  await createWindow()
+// 单实例锁必须在 ready 之前抢：第二次点链接要唤起已有窗口，而不是开第二个实例
+let primaryInstance = false
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    }
+primaryInstance = setupDeepLinkHandlers()
+if (!primaryInstance) {
+  // 走到这里只有一个原因：`requestSingleInstanceLock()` 返回 false，即已经有 LabFlow 在跑。
+  // 链接已经在那个实例的 `second-instance` 里转交过了；本实例不许做任何事：
+  // 不能建窗口、不能碰注册表、不能起 dev 服务器。
+  // 用 exit 而不是 quit：quit 是异步的，后面的 whenReady 还会跑、会再开出一个窗口。
+  console.log('[DeepLink] 没抢到单实例锁（已有 LabFlow 在运行）→ 直接退出，不开窗口')
+  app.exit(0)
+}
+
+if (primaryInstance) {
+  app.whenReady().then(async () => {
+    // 注册 labflow:// 协议（开发模式要带 electron 可执行文件 + 脚本路径，打包后不用带）
+    registerDeepLinkProtocol()
+    await createWindow()
+    startLockWatch()
+
+    // 首次启动时 argv 里就带着链接（Windows 下点链接会新起一个实例再转交）
+    const launchLink = initialDeepLink()
+    if (launchLink) deliverDeepLink(launchLink)
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      }
+    })
   })
-})
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -1362,4 +1458,449 @@ ipcMain.handle('config:reset-paths', async () => {
 ipcMain.handle('config:restart-app', () => {
   app.relaunch()
   app.exit(0)
+})
+
+// ==================== 工程导出（.yml / .canvas / SOP）====================
+
+// 读取导出设置（缺字段用默认值补齐）
+ipcMain.handle('config:get-export-settings', () => {
+  const config = loadConfig()
+  return normalizeExportSettings({
+    directory: config.exportDir,
+    fileNameTemplate: config.exportFileNameTemplate,
+    autoSubfolder: config.exportAutoSubfolder,
+    scaleX: config.exportScaleX,
+    scaleY: config.exportScaleY,
+    autoExportOnSave: config.exportAutoExportOnSave,
+    exportCanvasFile: config.exportExportCanvasFile,
+    exportImage: config.exportExportImage,
+    exportDataFile: config.exportExportDataFile,
+    // 旧版存的是像素净空，normalizeExportSettings 里会折算成倍数
+    spacingX: config.exportSpacingX,
+    spacingY: config.exportSpacingY
+  })
+})
+
+// 保存导出设置（默认目录 / 文件名模板 / 自动建子文件夹）
+ipcMain.handle('config:set-export-settings', async (_, settings: Partial<ExportSettings>) => {
+  try {
+    const config = loadConfig()
+    const merged = normalizeExportSettings({
+      directory: settings?.directory !== undefined ? settings.directory : config.exportDir,
+      fileNameTemplate:
+        settings?.fileNameTemplate !== undefined ? settings.fileNameTemplate : config.exportFileNameTemplate,
+      autoSubfolder:
+        settings?.autoSubfolder !== undefined ? settings.autoSubfolder : config.exportAutoSubfolder,
+      scaleX: settings?.scaleX !== undefined ? settings.scaleX : config.exportScaleX,
+      scaleY: settings?.scaleY !== undefined ? settings.scaleY : config.exportScaleY,
+      autoExportOnSave:
+        settings?.autoExportOnSave !== undefined ? settings.autoExportOnSave : config.exportAutoExportOnSave,
+      exportCanvasFile:
+        settings?.exportCanvasFile !== undefined ? settings.exportCanvasFile : config.exportExportCanvasFile,
+      exportImage: settings?.exportImage !== undefined ? settings.exportImage : config.exportExportImage,
+      exportDataFile:
+        settings?.exportDataFile !== undefined ? settings.exportDataFile : config.exportExportDataFile,
+      spacingX: (settings as { spacingX?: number })?.spacingX,
+      spacingY: (settings as { spacingY?: number })?.spacingY
+    })
+
+    if (merged.directory) {
+      if (!path.isAbsolute(merged.directory)) {
+        return { success: false, error: '目录必须是绝对路径' }
+      }
+      if (!fs.existsSync(merged.directory)) {
+        fs.mkdirSync(merged.directory, { recursive: true })
+      }
+      // 目录可写性测试，避免导出时才发现写不进去
+      const testFile = path.join(merged.directory, '.labflow_write_test')
+      try {
+        fs.writeFileSync(testFile, '')
+        fs.unlinkSync(testFile)
+      } catch {
+        return { success: false, error: '目录不可写，请选择其他位置' }
+      }
+    }
+
+    config.exportDir = merged.directory
+    config.exportFileNameTemplate = merged.fileNameTemplate
+    config.exportAutoSubfolder = merged.autoSubfolder
+    config.exportScaleX = merged.scaleX
+    config.exportScaleY = merged.scaleY
+    config.exportAutoExportOnSave = merged.autoExportOnSave
+    config.exportExportCanvasFile = merged.exportCanvasFile
+    config.exportExportImage = merged.exportImage
+    config.exportExportDataFile = merged.exportDataFile
+    // 旧字段不再写，避免两套值打架
+    delete config.exportSpacingX
+    delete config.exportSpacingY
+    saveConfig(config)
+
+    return { success: true, settings: merged }
+  } catch (error) {
+    console.error('[Export] Save settings failed:', error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// 看板截图：对实验模拟页的画布区域做一次真实截图，返回 PNG 的 base64
+// rect 用 CSS 像素（=webContents 的 DIP 坐标），由渲染进程量好画布容器再传上来
+ipcMain.handle('export:capture-board', async (_, rect: { x: number; y: number; width: number; height: number }) => {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return null
+    const width = Math.max(1, Math.round(rect?.width || 0))
+    const height = Math.max(1, Math.round(rect?.height || 0))
+    if (width < 40 || height < 40) return null
+    const image = await mainWindow.webContents.capturePage({
+      x: Math.round(rect?.x || 0),
+      y: Math.round(rect?.y || 0),
+      width,
+      height
+    })
+    if (image.isEmpty()) return null
+    return image.toPNG().toString('base64')
+  } catch (error) {
+    console.error('[Export] 看板截图失败：', error)
+    return null
+  }
+})
+
+// 一次写出一整个工程的三份文件（一个目录 + 三个文件名）
+// 目录为空时弹选择框；开了自动建子文件夹就写在 <目录>/<工程名>/ 下
+ipcMain.handle(
+  'export:project',
+  async (
+    _,
+    payload: {
+      directory?: string
+      subfolder?: string
+      files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]
+    }
+  ) => {
+    try {
+      const files = Array.isArray(payload?.files) ? payload.files : []
+      if (files.length === 0) {
+        return { success: false, error: '没有要写出的文件' }
+      }
+
+      let targetDir = (payload?.directory || '').trim()
+      if (!targetDir) {
+        const picked = await dialog.showOpenDialog(mainWindow!, {
+          title: '选择导出目录',
+          properties: ['openDirectory', 'createDirectory']
+        })
+        if (picked.canceled || picked.filePaths.length === 0) {
+          return { success: false, canceled: true }
+        }
+        targetDir = picked.filePaths[0]
+      }
+
+      // 文件名只允许纯文件名，防止 ../ 之类写到别处
+      const safeName = (name: unknown) => path.basename(String(name || '')).replace(/[\\/:*?"<>|]/g, '-')
+
+      const subfolderRaw = payload?.subfolder ? safeName(payload.subfolder) : ''
+      const subfolder = subfolderRaw && subfolderRaw !== '.' && subfolderRaw !== '..' ? subfolderRaw : ''
+      const dir = subfolder ? path.join(targetDir, subfolder) : targetDir
+      fs.mkdirSync(dir, { recursive: true })
+
+      const written: string[] = []
+      for (const file of files) {
+        const name = safeName(file?.name)
+        if (!name || name === '.' || name === '..' || name.startsWith('..')) {
+          return { success: false, error: `文件名不合法：${String(file?.name ?? '')}` }
+        }
+        const filePath = path.join(dir, name)
+        // 图片按 base64 解成二进制写，文本按 utf8 写
+        if (file?.encoding === 'base64') {
+          fs.writeFileSync(filePath, Buffer.from(String(file?.content ?? ''), 'base64'))
+        } else {
+          fs.writeFileSync(filePath, String(file?.content ?? ''), 'utf-8')
+        }
+        written.push(filePath)
+      }
+
+      return { success: true, directory: dir, files: written }
+    } catch (error) {
+      console.error('[Export] Project export failed:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+)
+
+// ==================== 数据正本目录（工程/ 仓库/ 导出） ====================
+
+function getDataRoot(): string {
+  const config = loadConfig()
+  const root = config.dataRoot && config.dataRoot.trim() ? config.dataRoot : DEFAULT_DATA_ROOT
+  return root
+}
+
+/** 老配置一次性迁移：白板开关的默认值从「开」改成「关」（正本迁移后笔记里看 PNG 就够） */
+function migrateExportDefaultsOnce(): void {
+  const config = loadConfig()
+  if (config.exportDefaultsV2Migrated) return
+  config.exportExportCanvasFile = false
+  if (config.exportExportDataFile === undefined) config.exportExportDataFile = false
+  config.exportDefaultsV2Migrated = true
+  saveConfig(config)
+  console.log('[Config] 导出默认值已迁移到第 1 步版本：白板关、截图开、数据关')
+}
+
+// ==================== Agent 锁（第 2 步） ====================
+
+function lockFilePath(): string {
+  return path.join(getDataRoot(), LOCK_FILENAME)
+}
+
+/** 读一次锁文件，坏内容也返回（不抛） */
+function readAgentLock(): ParsedAgentLock {
+  try {
+    const file = lockFilePath()
+    if (!fs.existsSync(file)) return null
+    return parseAgentLock(fs.readFileSync(file, 'utf8'))
+  } catch (error) {
+    console.warn('[Lock] 读锁失败：', (error as Error).message)
+    return { broken: true, raw: '', reason: '读取失败' }
+  }
+}
+
+function broadcastAgentLock(): void {
+  const payload = readAgentLock()
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('lock:changed', payload)
+  }
+}
+
+let lockWatcher: fs.FSWatcher | null = null
+const storeWriteTracker = createWriteTracker()
+let storeWatchTimer: ReturnType<typeof setTimeout> | null = null
+let pendingStoreChange: StoreChangePayload | null = null
+
+/** 扫一遍正本目录，找出「不是我们刚写的」那些文件（内容哈希变了才算变） */
+function collectStoreChanges(root: string): StoreChangePayload {
+  const payload: StoreChangePayload = { warehouse: false, projects: [] }
+
+  const whFile = warehousePath(root)
+  if (storeWriteTracker.shouldBroadcast(whFile, readTextFile(whFile))) payload.warehouse = true
+
+  const dir = projectDir(root)
+  let files: string[] = []
+  try {
+    files = fs.readdirSync(dir).filter(name => name.toLowerCase().endsWith('.yml') && !name.includes('.tmp'))
+  } catch {
+    files = []
+  }
+  for (const name of files) {
+    const file = path.join(dir, name)
+    if (storeWriteTracker.shouldBroadcast(file, readTextFile(file))) payload.projects.push(name)
+  }
+  return payload
+}
+
+function flushStoreChange(): void {
+  storeWatchTimer = null
+  const payload = pendingStoreChange
+  pendingStoreChange = null
+  if (!payload) return
+  if (!payload.warehouse && payload.projects.length === 0) return
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('store:filesChanged', payload)
+  }
+}
+
+/** 事件攒 150ms 再扫（一次保存会连着来好几个 fs 事件） */
+function scheduleStoreScan(): void {
+  if (storeWatchTimer) return
+  storeWatchTimer = setTimeout(() => {
+    try {
+      const next = collectStoreChanges(getDataRoot())
+      if (next.warehouse || next.projects.length > 0) {
+        pendingStoreChange = pendingStoreChange
+          ? { warehouse: pendingStoreChange.warehouse || next.warehouse, projects: [...new Set([...pendingStoreChange.projects, ...next.projects])] }
+          : next
+      }
+      flushStoreChange()
+    } catch (error) {
+      console.warn('[Store] 扫描正本目录失败：', (error as Error).message)
+    }
+  }, 150)
+}
+
+/** 监听 dataRoot（锁 + 仓库正本 + 工程正本）：一个 watcher 全包 */
+function startLockWatch(): void {
+  if (lockWatcher) return
+  const root = getDataRoot()
+  try {
+    ensureDataRoot(root)
+    // 先拍一次快照，避免启动瞬间把现有文件当成「刚被改」
+    collectStoreChanges(root)
+    lockWatcher = fs.watch(root, (_event, filename) => {
+      // filename 可能是 null（某些平台）或 Buffer
+      const name = filename ? String(filename) : ''
+      const kind = classifyStoreEvent(name)
+      if (kind.kind === 'lock' || !name) {
+        broadcastAgentLock()
+        return
+      }
+      // 工程目录里的文件：Windows 上目录事件只报「工程」这一层，所以一律重新扫一遍
+      scheduleStoreScan()
+    })
+    lockWatcher.on('error', error => {
+      console.warn('[Lock] 监听中断：', (error as Error).message)
+      lockWatcher = null
+    })
+    console.log('[Store] 正在监听正本目录：', root)
+  } catch (error) {
+    console.warn('[Lock] 无法监听锁目录：', (error as Error).message)
+  }
+}
+
+ipcMain.handle('lock:get', () => readAgentLock())
+
+ipcMain.handle('lock:forceRelease', () => {
+  try {
+    const file = lockFilePath()
+    if (fs.existsSync(file)) fs.unlinkSync(file)
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('data:get-info', () => {
+  const root = getDataRoot()
+  const ok = ensureDataRoot(root)
+  return {
+    root,
+    projectDir: projectDir(root),
+    exportDir: exportDir(root),
+    warehousePath: warehousePath(root),
+    ok,
+    projects: listProjectFiles(root).map(file => ({ name: file.name, fileName: file.fileName, stat: file.stat }))
+  }
+})
+
+ipcMain.handle('data:set-root', async (_, nextRoot: string) => {
+  try {
+    if (!nextRoot || !path.isAbsolute(nextRoot)) return { success: false, error: '路径必须是绝对路径' }
+    const ok = ensureDataRoot(nextRoot)
+    if (!ok) return { success: false, error: '目录不可用（盘符不存在或无权限）' }
+    const testFile = path.join(nextRoot, '.labflow_write_test')
+    try {
+      fs.writeFileSync(testFile, '')
+      fs.unlinkSync(testFile)
+    } catch {
+      return { success: false, error: '目录不可写，请换一个位置' }
+    }
+    const config = loadConfig()
+    config.dataRoot = nextRoot
+    saveConfig(config)
+    return { success: true, root: nextRoot }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('data:list-projects', () => listProjectFiles(getDataRoot()))
+
+ipcMain.handle('data:read-project', (_, fileNameOrName: string) => {
+  const root = getDataRoot()
+  const found = readProjectFile(root, fileNameOrName)
+  if (!found) return { ok: false, reason: 'not-found' as const }
+  return { ok: true, path: found.path, content: found.content, stat: found.stat }
+})
+
+ipcMain.handle('data:stat-project', (_, fileNameOrName: string) => {
+  const root = getDataRoot()
+  const found = readProjectFile(root, fileNameOrName)
+  return found ? found.stat : null
+})
+
+/**
+ * 写工程正本。
+ * `expect` 是上次读/写时的 {mtimeMs,size}；文件被人手改过就对不上 → 不覆盖，返回 conflict。
+ */
+ipcMain.handle(
+  'data:write-project',
+  (_, payload: { id?: string; name: string; content: string; expect?: FileStat | null }) => {
+    try {
+      const root = getDataRoot()
+      ensureDataRoot(root)
+      const target = resolveProjectPath(root, payload.id, payload.name)
+      const current = statFile(target)
+
+      if (payload.expect && current) {
+        const changed = Math.abs(current.mtimeMs - payload.expect.mtimeMs) > 1 || current.size !== payload.expect.size
+        if (changed) {
+          return { ok: false, conflict: true as const, path: target, stat: current }
+        }
+      }
+
+      const stat = writeFileAtomic(target, payload.content)
+      storeWriteTracker.noteWritten(target, payload.content)
+      console.log('[Store] 写工程正本：', target)
+      return { ok: true as const, path: target, fileName: path.basename(target), stat }
+    } catch (error) {
+      console.error('[Store] 写工程正本失败：', error)
+      return { ok: false as const, error: (error as Error).message }
+    }
+  }
+)
+
+ipcMain.handle('data:read-warehouse', () => {
+  const root = getDataRoot()
+  const target = warehousePath(root)
+  const content = readTextFile(target)
+  if (content === null) return { ok: false as const, reason: 'not-found' as const }
+  return { ok: true as const, path: target, content, stat: statFile(target) }
+})
+
+ipcMain.handle('data:write-warehouse', (_, payload: { content: string; expect?: FileStat | null }) => {
+  try {
+    const root = getDataRoot()
+    ensureDataRoot(root)
+    const target = warehousePath(root)
+    const current = statFile(target)
+    if (payload.expect && current) {
+      const changed = Math.abs(current.mtimeMs - payload.expect.mtimeMs) > 1 || current.size !== payload.expect.size
+      if (changed) return { ok: false as const, conflict: true as const, stat: current }
+    }
+    const stat = writeFileAtomic(target, payload.content)
+    storeWriteTracker.noteWritten(target, payload.content)
+    console.log('[Store] 写仓库正本：', target)
+    return { ok: true as const, path: target, stat }
+  } catch (error) {
+    return { ok: false as const, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle(
+  'data:write-derived',
+  (_, files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]) => {
+    try {
+      const root = getDataRoot()
+      ensureDataRoot(root)
+      return { ok: true as const, ...writeDerivedFiles(root, files || []) }
+    } catch (error) {
+      return { ok: false as const, error: (error as Error).message }
+    }
+  }
+)
+
+/** 保存时撞上外部修改：弹原生对话框，默认按钮是「重新载入」 */
+ipcMain.handle('data:ask-conflict', async (_, payload: { projectName: string; fileName?: string }) => {
+  const result = await dialog.showMessageBox(mainWindow!, {
+    type: 'warning',
+    title: '工程文件已被外部修改',
+    message: `「${payload.projectName}」的工程文件在 LabFlow 之外被改过。`,
+    detail: `${payload.fileName || '工程文件'}\n\n如果选「重新载入」，界面会用文件里的内容覆盖当前未保存的改动；选「用界面覆盖」则把界面上的内容写回文件。`,
+    buttons: ['重新载入', '用界面覆盖', '取消'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  })
+  return result.response === 0 ? 'reload' : result.response === 1 ? 'overwrite' : 'cancel'
+})
+
+app.whenReady().then(() => {
+  migrateExportDefaultsOnce()
 })

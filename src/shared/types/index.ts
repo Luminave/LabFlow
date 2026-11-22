@@ -78,6 +78,10 @@ export interface Tube {
   storageCondition?: string // 存储条件 (如 -20°C, 4°C)
   notes?: string
   tags?: string[]
+  /** 批号（仓库试剂的 仓库.yml 里有；数据库表没有这列，正本是文件） */
+  lotNumber?: string
+  /** 开封日 YYYY-MM-DD（同上） */
+  openedAt?: string
 }
 
 // 移液连接

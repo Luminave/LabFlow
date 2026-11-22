@@ -7,6 +7,7 @@ import { useGroupStore, GROUP_PRESET_COLORS } from '../stores/groupStore'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
 import { TubeType, TubeStatus, VolumeUnit, ConcentrationUnit, TubeGroup } from '@shared/types'
+import { concentrationText, pairText } from '../utils/tubeNodeText'
 import styles from './WarehousePage.module.css'
 
 // 成分显示组件（带颜色高亮）
@@ -23,7 +24,7 @@ function SubstanceDisplay({ name, concentration, concentrationUnit }: { name: st
   
   return (
     <span className={styles.substance}>
-      <span style={style}>{name}</span> ({concentration} {concentrationUnit})
+      <span style={style}>{name}</span> ({concentrationText({ name, concentration, concentrationUnit: concentrationUnit as ConcentrationUnit })})
     </span>
   )
 }
@@ -412,7 +413,9 @@ function TubeCard({ tube, onDelete, onStatusChange, onEdit, onAddToExperiment, h
         
         <div className={styles.tubeInfo}>
           <span className={styles.label}>{language === 'zh' ? '体积:' : 'Volume:'}</span>
-          <span>{tube.remainingVolume === Infinity ? '∞' : `${tube.remainingVolume} / ${tube.totalVolume === Infinity ? '∞' : tube.totalVolume}`} {tube.totalVolumeUnit}</span>
+          <span>
+            {pairText(tube.remainingVolume, tube.totalVolume, tube.totalVolumeUnit || 'μL')}
+          </span>
         </div>
         
         {tube.type !== 'buffer' && (

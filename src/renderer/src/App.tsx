@@ -1,5 +1,7 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { Component, type ReactNode } from 'react'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Component, useEffect, type ReactNode } from 'react'
+import { parseProjectLink, pickProject } from '@/core/deepLink'
+import { useExperimentStore } from './stores/experimentStore'
 import Layout from './components/Layout'
 import HomePage from './pages/HomePage'
 import WarehousePage from './pages/WarehousePage'
@@ -10,6 +12,9 @@ import SettingsPage from './pages/SettingsPage'
 import ToolsPage from './pages/ToolsPage'
 import BackupPage from './pages/BackupPage'
 import NarratorPage from './pages/NarratorPage'
+import { GlobalToast } from './components/GlobalToast'
+import { useStoreHotReload } from './utils/storeHotReload'
+import { useWarehouseFileSync } from './utils/warehouseSync'
 
 // 错误边界组件：防止页面白屏
 interface ErrorBoundaryProps {
@@ -77,9 +82,71 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
+/**
+ * 深链接：笔记里点 `labflow://open?project=…` 时，主进程把 URL 推过来，
+ * 这里负责「找到工程 → 载入 → 跳到实验模拟页」。找不到就用弹框说清楚，不静默失败。
+ */
+function useProjectDeepLink() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const subscribe = window.electronAPI?.onOpenProject
+    if (!subscribe) return
+
+    const openProject = async (url: string) => {
+      const parsed = parseProjectLink(url)
+      if (parsed.ok === false) {
+        alert(`这个链接打不开：${parsed.detail}`)
+        return
+      }
+
+      const store = useExperimentStore.getState()
+      let match = pickProject(store.experiments || [], parsed)
+
+      // 刚启动时工程列表可能还没加载，先拉一次再试
+      if (!match && typeof store.fetchExperiments === 'function') {
+        try {
+          await store.fetchExperiments()
+        } catch (e) {
+          console.error('[DeepLink] 拉取工程列表失败:', e)
+        }
+        match = pickProject(useExperimentStore.getState().experiments || [], parsed)
+      }
+
+      if (!match) {
+        alert(
+          `在 LabFlow 里找不到工程「${parsed.project}」。\n` +
+            `可能已经被删除，或者名字对不上（链接里的名字要和工程名完全一致）。`
+        )
+        return
+      }
+
+      const opened = useExperimentStore.getState().loadExperiment(match.id)
+      if (!opened) {
+        alert(`工程「${match.name}」读取失败，数据可能已损坏。`)
+        return
+      }
+      navigate('/experiment')
+    }
+
+    const unsubscribe = subscribe((url: string) => {
+      void openProject(url)
+    })
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [navigate])
+}
+
 function App() {
+  useProjectDeepLink()
+  // 仓库正本（D:\学习\labflow\仓库.yml）：启动读一次，之后变动回写
+  useWarehouseFileSync()
+  // 正本文件被外部改动时热加载（防自激在主进程做）
+  useStoreHotReload()
   return (
     <Layout>
+      <GlobalToast />
       <ErrorBoundary>
         <Routes>
           <Route path="/" element={<HomePage />} />

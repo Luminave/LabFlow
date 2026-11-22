@@ -30,6 +30,35 @@ npm-debug.log*
 # Electron
 release/
 dist-electron/
+dist-cli/
 
 # Claude Code
 CLAUDE.md
+
+# Electron / electron-builder 其它产物（release/ 已在上方）
+dist-ssr/
+release*/
+out-*/
+*.asar
+*.blockmap
+*.zip
+latest*.yml
+
+# TypeScript / 工具缓存
+*.tsbuildinfo
+.eslintcache
+.prettiercache
+.vite/
+node_modules/.vite/
+
+# 测试与覆盖率
+coverage/
+
+# 本地数据库（用户数据，不入库）
+database/*.db
+database/*.db-journal
+*.db-wal
+*.db-shm
+
+# 本地覆盖配置（保留 .env.example）
+*.local

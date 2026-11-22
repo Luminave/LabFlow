@@ -6,14 +6,17 @@
 }
 
 .header {
-  padding: var(--spacing-lg);
+  padding: 24px 32px;
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-color);
+  box-sizing: border-box;
 }
 
 .title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .content {

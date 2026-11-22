@@ -5,6 +5,8 @@ import { useSubstanceColorStore } from '../stores/substanceColorStore'
 import { useWarehouseStore } from '../stores/warehouseStore'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
+import type { ConcentrationUnit } from '@shared/types'
+import { concentrationText } from '../utils/tubeNodeText'
 import styles from './TracePage.module.css'
 
 interface TubeHistory {
@@ -46,7 +48,7 @@ function SubstanceDisplay({ name, concentration, concentrationUnit }: { name: st
   
   return (
     <span className={styles.substanceMini}>
-      <span style={style}>{name}</span> ({concentration} {concentrationUnit})
+      <span style={style}>{name}</span> ({concentrationText({ name, concentration, concentrationUnit: concentrationUnit as ConcentrationUnit })})
     </span>
   )
 }

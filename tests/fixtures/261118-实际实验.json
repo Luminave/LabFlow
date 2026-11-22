@@ -1,0 +1,1744 @@
+{
+  "_comment": "LabFlow 真实工程只读导出（原始 db 未修改）。由 scripts fixture-export 生成。",
+  "source": {
+    "database": "C:/Users/27133/AppData/Roaming/LabFlow/data/labflow.db (read-only copy) ",
+    "exportedAt": "2026-11-22",
+    "rowId": "8b566421-600e-47e4-9947-19995cea3eec"
+  },
+  "experiment": {
+    "id": "8b566421-600e-47e4-9947-19995cea3eec",
+    "name": "261118-实际实验",
+    "status": "draft",
+    "createdAt": "2026-11-18T08:21:28.159Z",
+    "updatedAt": "2026-11-18T08:35:59.687Z",
+    "tubes": [
+      {
+        "id": "a3259674-6f29-4e66-911b-ca7e3b929b9a",
+        "name": "Tri-b",
+        "type": "source",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 20,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-b",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:01:23.774Z",
+        "updatedAt": "2026-11-18T08:02:37.346Z",
+        "status": "active",
+        "groupId": "3a12cca2-5418-4907-b429-d4c046d3383d",
+        "tags": []
+      },
+      {
+        "id": "bba83da1-7849-4555-924f-2fa6121a8324",
+        "name": "Tri-c",
+        "type": "source",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 20,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-c",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:01:29.089Z",
+        "updatedAt": "2026-11-18T08:02:39.053Z",
+        "status": "active",
+        "groupId": "3a12cca2-5418-4907-b429-d4c046d3383d",
+        "tags": []
+      },
+      {
+        "id": "9dd21f01-fc37-4288-8736-3e40f0c6a788",
+        "name": "H2",
+        "type": "source",
+        "totalVolume": 100,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 100,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "H2",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T07:49:47.134Z",
+        "updatedAt": "2026-11-18T08:02:33.070Z",
+        "status": "active",
+        "groupId": "3a12cca2-5418-4907-b429-d4c046d3383d",
+        "tags": []
+      },
+      {
+        "id": "bd445add-302a-405e-91b1-97939952ef52",
+        "name": "H1",
+        "type": "source",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 20,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "H1",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T07:49:36.468Z",
+        "updatedAt": "2026-11-18T08:02:34.702Z",
+        "status": "active",
+        "groupId": "3a12cca2-5418-4907-b429-d4c046d3383d",
+        "tags": []
+      },
+      {
+        "id": "316bdc3b-8f63-47d9-9ed1-491f51908d7c",
+        "name": "E3-S",
+        "type": "source",
+        "totalVolume": 25,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 25,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "E3-SH",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-09-09T08:27:58.608Z",
+        "updatedAt": "2026-11-18T07:48:59.667Z",
+        "status": "active",
+        "groupId": "858b6023-d619-4934-be51-0b4979f7a6c8",
+        "tags": []
+      },
+      {
+        "id": "48b9166d-f19c-480d-9bc7-71016b1e94e1",
+        "name": "E2",
+        "type": "source",
+        "totalVolume": 50,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 50,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "E2",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-09-09T08:27:51.835Z",
+        "updatedAt": "2026-09-09T08:50:00.669Z",
+        "status": "active",
+        "groupId": "858b6023-d619-4934-be51-0b4979f7a6c8",
+        "tags": []
+      },
+      {
+        "id": "e43f4eba-3d73-406f-bd3c-164309413795",
+        "name": "E1",
+        "type": "source",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 20,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "E1",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-09-09T08:27:42.024Z",
+        "updatedAt": "2026-09-09T08:49:36.947Z",
+        "status": "active",
+        "groupId": "858b6023-d619-4934-be51-0b4979f7a6c8",
+        "tags": []
+      },
+      {
+        "id": "5efa18f4-f111-4017-a6eb-7f5d0bc1b682",
+        "name": "F",
+        "type": "source",
+        "totalVolume": 23,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 23,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "F",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-07-14T06:20:39.984Z",
+        "updatedAt": "2026-09-09T08:50:41.573Z",
+        "status": "active",
+        "groupId": "858b6023-d619-4934-be51-0b4979f7a6c8",
+        "tags": []
+      },
+      {
+        "id": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "name": "2△a",
+        "type": "intermediate",
+        "totalVolume": 30,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-c",
+            "concentration": 2,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "Tri-a",
+            "concentration": 6,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:04:50.087Z",
+        "updatedAt": "2026-11-18T08:35:31.917Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 8
+      },
+      {
+        "id": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "name": "2△b",
+        "type": "intermediate",
+        "totalVolume": 30,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-c",
+            "concentration": 2,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "Tri-b",
+            "concentration": 6,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:05:02.834Z",
+        "updatedAt": "2026-11-18T08:35:36.006Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 9
+      },
+      {
+        "id": "efb83590-58a4-4818-a384-5fd0fc0be4cb",
+        "name": "Tri-a",
+        "type": "source",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 20,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-a",
+            "concentration": 100,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:01:18.413Z",
+        "updatedAt": "2026-11-18T08:06:25.748Z",
+        "status": "active",
+        "groupId": "3a12cca2-5418-4907-b429-d4c046d3383d",
+        "tags": []
+      },
+      {
+        "id": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "name": "5E_cp",
+        "type": "intermediate",
+        "totalVolume": 40,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "E2",
+            "concentration": 5,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "E1",
+            "concentration": 5,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "E3-SH",
+            "concentration": 5,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:07:32.296Z",
+        "updatedAt": "2026-11-18T08:34:44.613Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 1
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "name": "1△H1",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-c",
+            "concentration": 1,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "Tri-a",
+            "concentration": 3,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "H1",
+            "concentration": 3,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:09:05.328Z",
+        "updatedAt": "2026-11-18T08:35:47.548Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 10
+      },
+      {
+        "id": "63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "name": "1△H2",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "H2",
+            "concentration": 3,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "Tri-c",
+            "concentration": 1,
+            "concentrationUnit": "μM"
+          },
+          {
+            "name": "Tri-b",
+            "concentration": 3,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:09:15.756Z",
+        "updatedAt": "2026-11-18T08:35:50.340Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 11
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "2accafd9-659f-46a0-8ead-49262b21f15c",
+        "name": "10F",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "F",
+            "concentration": 10,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:11:05.956Z",
+        "updatedAt": "2026-11-18T08:34:49.746Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 2
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-98b7ba14-2f1d-4b19-a071-04e198bc25bc",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "name": "10H2",
+        "type": "intermediate",
+        "totalVolume": 30,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "H2",
+            "concentration": 10,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:17:01.277Z",
+        "updatedAt": "2026-11-18T08:35:07.729Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 4
+      },
+      {
+        "id": "beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "name": "10H1",
+        "type": "intermediate",
+        "totalVolume": 30,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "H1",
+            "concentration": 10,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:17:17.731Z",
+        "updatedAt": "2026-11-18T08:35:04.196Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 3
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "name": "20TrA",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-a",
+            "concentration": 20,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:26:14.869Z",
+        "updatedAt": "2026-11-18T08:35:13.690Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 5
+      },
+      {
+        "id": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "name": "20TrC",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-c",
+            "concentration": 20,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:26:17.748Z",
+        "updatedAt": "2026-11-18T08:35:16.919Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 6
+      },
+      {
+        "id": "2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "name": "20TrB",
+        "type": "intermediate",
+        "totalVolume": 20,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [
+          {
+            "name": "Tri-b",
+            "concentration": 20,
+            "concentrationUnit": "μM"
+          }
+        ],
+        "createdAt": "2026-11-18T08:26:19.988Z",
+        "updatedAt": "2026-11-18T08:35:20.027Z",
+        "status": "active",
+        "selectedBuffer": "30c931b0-84ef-4765-a80a-64665d817abd",
+        "asSource": false,
+        "configOrder": 7
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      },
+      {
+        "id": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "name": "PBS",
+        "type": "buffer",
+        "totalVolume": 0,
+        "totalVolumeUnit": "μL",
+        "remainingVolume": 0,
+        "remainingVolumeUnit": "μL",
+        "substances": [],
+        "createdAt": "2026-07-14T06:19:00.050Z",
+        "updatedAt": "2026-07-14T06:19:00.050Z",
+        "status": "active",
+        "groupId": "8d626725-e617-4a89-af9f-9190ba4c0866",
+        "tags": []
+      }
+    ],
+    "tubePositions": [
+      {
+        "tubeId": "48b9166d-f19c-480d-9bc7-71016b1e94e1",
+        "x": -150,
+        "y": 435
+      },
+      {
+        "tubeId": "5efa18f4-f111-4017-a6eb-7f5d0bc1b682",
+        "x": -150,
+        "y": 870
+      },
+      {
+        "tubeId": "316bdc3b-8f63-47d9-9ed1-491f51908d7c",
+        "x": -150,
+        "y": 720
+      },
+      {
+        "tubeId": "bd445add-302a-405e-91b1-97939952ef52",
+        "x": -180,
+        "y": -420
+      },
+      {
+        "tubeId": "e43f4eba-3d73-406f-bd3c-164309413795",
+        "x": -150,
+        "y": 570
+      },
+      {
+        "tubeId": "bba83da1-7849-4555-924f-2fa6121a8324",
+        "x": -375,
+        "y": 0
+      },
+      {
+        "tubeId": "a3259674-6f29-4e66-911b-ca7e3b929b9a",
+        "x": -375,
+        "y": 165
+      },
+      {
+        "tubeId": "9dd21f01-fc37-4288-8736-3e40f0c6a788",
+        "x": -375,
+        "y": 315
+      },
+      {
+        "tubeId": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "x": 195,
+        "y": -90
+      },
+      {
+        "tubeId": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "x": 195,
+        "y": 105
+      },
+      {
+        "tubeId": "efb83590-58a4-4818-a384-5fd0fc0be4cb",
+        "x": -375,
+        "y": -165
+      },
+      {
+        "tubeId": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "x": 330,
+        "y": 540
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "x": 75,
+        "y": 270
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "x": 90,
+        "y": -150
+      },
+      {
+        "tubeId": "993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "x": 480,
+        "y": -105
+      },
+      {
+        "tubeId": "63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "x": 480,
+        "y": 90
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "x": 405,
+        "y": -240
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "x": 360,
+        "y": 75
+      },
+      {
+        "tubeId": "2accafd9-659f-46a0-8ead-49262b21f15c",
+        "x": 225,
+        "y": 870
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-98b7ba14-2f1d-4b19-a071-04e198bc25bc",
+        "x": 105,
+        "y": 825
+      },
+      {
+        "tubeId": "9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "x": 285,
+        "y": 300
+      },
+      {
+        "tubeId": "beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "x": 135,
+        "y": -315
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "x": 55,
+        "y": -375
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "x": 165,
+        "y": 300
+      },
+      {
+        "tubeId": "0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "x": -165,
+        "y": -165
+      },
+      {
+        "tubeId": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "x": -165,
+        "y": 0
+      },
+      {
+        "tubeId": "2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "x": -165,
+        "y": 165
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "x": -255,
+        "y": -45
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "x": -240,
+        "y": 120
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "x": -255,
+        "y": -195
+      },
+      {
+        "tubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "x": 195,
+        "y": 480
+      }
+    ],
+    "connections": [
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "toTubeId": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "volume": 18,
+        "volumeUnit": "μL",
+        "id": "c0f640da-a97e-4747-90f2-029f31d3382d"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "toTubeId": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "volume": 18,
+        "volumeUnit": "μL",
+        "id": "223b7f08-278e-4645-9ad0-e709812f1444"
+      },
+      {
+        "fromTubeId": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "toTubeId": "993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "volume": 10,
+        "volumeUnit": "μL",
+        "id": "d6276e3a-6548-42d7-ad74-95e9271fdea7"
+      },
+      {
+        "fromTubeId": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "toTubeId": "63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "volume": 10,
+        "volumeUnit": "μL",
+        "id": "be000516-7ebf-4578-be68-fa7eadb7ca6d"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "toTubeId": "993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "volume": 4,
+        "volumeUnit": "μL",
+        "id": "e197a137-be66-4eb9-bc69-b9602bc48e1b"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "toTubeId": "63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "volume": 4,
+        "volumeUnit": "μL",
+        "id": "e7aa6cfa-1a1c-478f-bd4e-2ead6d078308"
+      },
+      {
+        "fromTubeId": "5efa18f4-f111-4017-a6eb-7f5d0bc1b682",
+        "toTubeId": "2accafd9-659f-46a0-8ead-49262b21f15c",
+        "volume": 2,
+        "volumeUnit": "μL",
+        "id": "4e27c0b9-7460-45d1-b8c4-9276a2f2da8d"
+      },
+      {
+        "fromTubeId": "9dd21f01-fc37-4288-8736-3e40f0c6a788",
+        "toTubeId": "9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "volume": 3,
+        "volumeUnit": "μL",
+        "id": "9c086e09-7884-4bb0-9325-4f9eeb0dc66f"
+      },
+      {
+        "fromTubeId": "9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "toTubeId": "63e6c0ef-f7fe-49c3-a8c4-83e32d7564c9",
+        "volume": 6,
+        "volumeUnit": "μL",
+        "id": "54c4a7f0-c388-492b-92a6-66cdb67fa9e7"
+      },
+      {
+        "fromTubeId": "beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "toTubeId": "993f340d-75c9-4efb-ab67-24bfb56bdd1d",
+        "volume": 6,
+        "volumeUnit": "μL",
+        "id": "6aa38e45-9db6-4456-b7fa-98e0b754496c"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "toTubeId": "beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "volume": 27,
+        "volumeUnit": "μL",
+        "id": "af2dfcf1-d4e6-4694-bdcf-dbe4dc247196"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "toTubeId": "9f11b02b-67fb-4d21-8fda-de5600e4224d",
+        "volume": 27,
+        "volumeUnit": "μL",
+        "id": "712e1957-0c89-4351-9be0-1368f58bab32"
+      },
+      {
+        "fromTubeId": "bd445add-302a-405e-91b1-97939952ef52",
+        "toTubeId": "beec8a66-a274-4a26-9ad2-e4c25ba5549e",
+        "volume": 3,
+        "volumeUnit": "μL",
+        "id": "c97bf129-0a78-4dbd-b6d1-2e216fc53cdc"
+      },
+      {
+        "fromTubeId": "efb83590-58a4-4818-a384-5fd0fc0be4cb",
+        "toTubeId": "0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "volume": 4,
+        "volumeUnit": "μL",
+        "id": "9fa2ce9e-7d72-41dd-9911-c132e84cd04e"
+      },
+      {
+        "fromTubeId": "bba83da1-7849-4555-924f-2fa6121a8324",
+        "toTubeId": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "volume": 4,
+        "volumeUnit": "μL",
+        "id": "b446cb3b-c8e7-4601-bde8-572185922779"
+      },
+      {
+        "fromTubeId": "a3259674-6f29-4e66-911b-ca7e3b929b9a",
+        "toTubeId": "2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "volume": 4,
+        "volumeUnit": "μL",
+        "id": "fb376eac-c4e3-4004-9ec9-4fa33ecee29f"
+      },
+      {
+        "fromTubeId": "0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "toTubeId": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "volume": 9,
+        "volumeUnit": "μL",
+        "id": "6a251c88-30a0-4c75-bdab-4c4b6b8eafc4"
+      },
+      {
+        "fromTubeId": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "toTubeId": "4845b9a7-25fe-462a-823b-8309b3b3bb4f",
+        "volume": 3,
+        "volumeUnit": "μL",
+        "id": "084280e4-e9a3-46e2-8193-1604441d1799"
+      },
+      {
+        "fromTubeId": "2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "toTubeId": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "volume": 9,
+        "volumeUnit": "μL",
+        "id": "01a48e6f-b423-4afc-a362-d8ba5317ee3c"
+      },
+      {
+        "fromTubeId": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "toTubeId": "aa3045ae-bf5c-4f92-a69f-cc8fc2156d88",
+        "volume": 3,
+        "volumeUnit": "μL",
+        "id": "aba72613-261a-448e-a258-02c1d2f9d2bd"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "toTubeId": "bf8e4fd0-5fb4-43d4-a441-8a57b96f61e7",
+        "volume": 16,
+        "volumeUnit": "μL",
+        "id": "f9aac906-b1ff-4770-881e-fb75af759283"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "toTubeId": "2f677f3e-1f54-418f-8d69-87db0eb56b21",
+        "volume": 16,
+        "volumeUnit": "μL",
+        "id": "a165012d-d1e8-4327-b368-eeedfc32e73e"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "toTubeId": "0ad613a1-663c-4b2a-861b-a1c768cdfe3c",
+        "volume": 16,
+        "volumeUnit": "μL",
+        "id": "6092a88c-4313-4037-bdcc-cb62b4ee9e54"
+      },
+      {
+        "fromTubeId": "48b9166d-f19c-480d-9bc7-71016b1e94e1",
+        "toTubeId": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "volume": 2,
+        "volumeUnit": "μL",
+        "id": "c1f044b4-06a0-4241-b264-851dbc0ef406"
+      },
+      {
+        "fromTubeId": "e43f4eba-3d73-406f-bd3c-164309413795",
+        "toTubeId": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "volume": 2,
+        "volumeUnit": "μL",
+        "id": "f97e5bf8-9a6f-44a8-b014-f3da66197778"
+      },
+      {
+        "fromTubeId": "316bdc3b-8f63-47d9-9ed1-491f51908d7c",
+        "toTubeId": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "volume": 2,
+        "volumeUnit": "μL",
+        "id": "bd7530d6-41f0-48e6-8ea0-1c784aaa40f3"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "toTubeId": "7c91fe99-8edf-4d3d-b7a8-fa045ff7f437",
+        "volume": 34,
+        "volumeUnit": "μL",
+        "id": "55dd939e-b5c1-4c3e-bbd4-e641e8d44f9f"
+      },
+      {
+        "fromTubeId": "buffer-30c931b0-84ef-4765-a80a-64665d817abd-98b7ba14-2f1d-4b19-a071-04e198bc25bc",
+        "toTubeId": "2accafd9-659f-46a0-8ead-49262b21f15c",
+        "volume": 18,
+        "volumeUnit": "μL",
+        "id": "9eec6d18-e66f-4d54-a0fa-c03d9e78db64"
+      }
+    ],
+    "initialStateTubes": null
+  },
+  "warehouseTubes": [
+    {
+      "id": "2ce4bb82-8f0c-4073-a62c-bf7d980e2203",
+      "name": "PBS-5Mg",
+      "type": "buffer",
+      "totalVolume": null,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": null,
+      "remainingVolumeUnit": "μL",
+      "substances": [],
+      "status": "active",
+      "createdAt": "2026-07-14T06:11:21.550Z",
+      "updatedAt": "2026-07-14T06:17:47.547Z"
+    },
+    {
+      "id": "24b74286-8ab6-4d00-93d2-e2cce1f1a5c4",
+      "name": "纳米球C",
+      "type": "source",
+      "totalVolume": 40,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 40,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "纳米球C",
+          "concentration": 12,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:13:24.524Z",
+      "updatedAt": "2026-07-14T06:17:23.725Z"
+    },
+    {
+      "id": "f2a9286a-29d9-4493-b26c-a2c0d759d8a1",
+      "name": "纳米球A",
+      "type": "source",
+      "totalVolume": 40,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 40,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "纳米球A",
+          "concentration": 12,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:16:08.956Z",
+      "updatedAt": "2026-07-14T06:17:25.904Z"
+    },
+    {
+      "id": "86e5ea45-e0e3-4795-9f3d-aa62974c42f3",
+      "name": "纳米球B",
+      "type": "source",
+      "totalVolume": 40,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 40,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "纳米球B",
+          "concentration": 12,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:16:18.820Z",
+      "updatedAt": "2026-07-14T06:17:27.147Z"
+    },
+    {
+      "id": "d553184c-7ded-4e07-b5b0-c16f42ae74b5",
+      "name": "H1",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "H1",
+          "concentration": 10,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:16:54.997Z",
+      "updatedAt": "2026-07-14T06:19:15.048Z"
+    },
+    {
+      "id": "85876524-32bf-4993-8302-65d74bd782da",
+      "name": "H2",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "H2",
+          "concentration": 10,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:17:08.193Z",
+      "updatedAt": "2026-07-14T06:19:13.420Z"
+    },
+    {
+      "id": "abc53cb8-120b-40bb-ab79-fa094395d0e5",
+      "name": "EDC探针",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:18:22.307Z",
+      "updatedAt": "2026-07-14T06:18:22.307Z"
+    },
+    {
+      "id": "30c931b0-84ef-4765-a80a-64665d817abd",
+      "name": "PBS",
+      "type": "buffer",
+      "totalVolume": null,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": null,
+      "remainingVolumeUnit": "μL",
+      "substances": [],
+      "status": "active",
+      "createdAt": "2026-07-14T06:19:00.050Z",
+      "updatedAt": "2026-07-14T06:19:00.050Z"
+    },
+    {
+      "id": "4d58e10b-a5f4-493a-af53-41895d7a9c48",
+      "name": "L1",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L1",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:19:45.520Z",
+      "updatedAt": "2026-07-14T06:21:01.040Z"
+    },
+    {
+      "id": "147d0ee9-990c-427d-8a04-f42ecb21d6dc",
+      "name": "L2",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L2",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:19:53.972Z",
+      "updatedAt": "2026-07-14T06:21:02.561Z"
+    },
+    {
+      "id": "1fadc27e-f9ef-4b6d-967a-8585678d9ca0",
+      "name": "L3",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L3",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:20:01.016Z",
+      "updatedAt": "2026-07-14T06:21:03.830Z"
+    },
+    {
+      "id": "76cc9f94-492e-4f66-998f-589e58c57157",
+      "name": "L复合物",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L1",
+          "concentration": 3,
+          "concentrationUnit": "μM"
+        },
+        {
+          "name": "L2",
+          "concentration": 3,
+          "concentrationUnit": "μM"
+        },
+        {
+          "name": "L3",
+          "concentration": 3,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:20:29.273Z",
+      "updatedAt": "2026-07-14T06:21:04.951Z"
+    },
+    {
+      "id": "5efa18f4-f111-4017-a6eb-7f5d0bc1b682",
+      "name": "F",
+      "type": "source",
+      "totalVolume": 23,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 23,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "F",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-07-14T06:20:39.984Z",
+      "updatedAt": "2026-09-09T08:50:41.573Z"
+    },
+    {
+      "id": "400c4071-fceb-4031-9783-e827a5f397a9",
+      "name": "F",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "F",
+          "concentration": 10,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:20:46.530Z",
+      "updatedAt": "2026-07-14T06:21:06.902Z"
+    },
+    {
+      "id": "679efc3c-7de1-42e2-9334-dd901297a4b7",
+      "name": "T",
+      "type": "source",
+      "totalVolume": 43,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 43,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "T",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-07-14T06:20:58.449Z",
+      "updatedAt": "2026-09-09T08:51:09.130Z"
+    },
+    {
+      "id": "5acfa6e5-ef5c-47c9-b61b-c8cbbda56623",
+      "name": "游离H1",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "游离H1",
+          "concentration": 10,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:32:53.173Z",
+      "updatedAt": "2026-07-30T07:59:33.042Z"
+    },
+    {
+      "id": "07bf38e4-f2e1-4865-bb14-6b15c6e3c4b7",
+      "name": "游离H2",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "游离H2",
+          "concentration": 10,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-14T06:33:07.333Z",
+      "updatedAt": "2026-07-30T07:59:31.589Z"
+    },
+    {
+      "id": "680be579-a6c2-4e09-b4db-6b1b48e09581",
+      "name": "E3-C",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "E3-C",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-30T08:34:49.218Z",
+      "updatedAt": "2026-07-30T13:04:10.474Z"
+    },
+    {
+      "id": "53ad8cc2-3ee5-4cb3-98a7-67a0796f8252",
+      "name": "L1（SSA）",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L1-S",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-30T08:35:33.278Z",
+      "updatedAt": "2026-07-30T08:37:55.420Z"
+    },
+    {
+      "id": "599e1cb7-ae8c-4153-9085-4894ae09b984",
+      "name": "L2（SSA）",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L2-S",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-30T08:35:55.078Z",
+      "updatedAt": "2026-07-30T08:38:10.429Z"
+    },
+    {
+      "id": "1695afa0-4868-4f49-b8e5-f1fde7b33582",
+      "name": "L3（SSA）",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L3-S",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-30T08:36:11.063Z",
+      "updatedAt": "2026-07-30T08:38:19.241Z"
+    },
+    {
+      "id": "09abca19-4ddd-40c7-bd5e-b72b7f226672",
+      "name": "L4（SSA）",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "L4-S",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-07-30T08:37:44.998Z",
+      "updatedAt": "2026-07-30T08:37:57.582Z"
+    },
+    {
+      "id": "1aa01720-40b0-4d44-abda-789b81acd657",
+      "name": "X1-A",
+      "type": "source",
+      "totalVolume": 22,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 22,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "X1-A",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-08-01T13:06:32.626Z",
+      "updatedAt": "2026-09-09T08:53:14.369Z"
+    },
+    {
+      "id": "5298f901-31df-4d01-a562-dc15eba2d21a",
+      "name": "S1",
+      "type": "source",
+      "totalVolume": 25,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 25,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "S1",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:25:04.474Z",
+      "updatedAt": "2026-09-09T08:51:43.366Z"
+    },
+    {
+      "id": "70ca9753-f52c-4f74-9582-0b5db0d071d3",
+      "name": "S2",
+      "type": "source",
+      "totalVolume": 41,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 41,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "S1",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:25:11.664Z",
+      "updatedAt": "2026-09-09T08:51:50.533Z"
+    },
+    {
+      "id": "23385e8a-6106-4618-a687-8b747c73974f",
+      "name": "S3",
+      "type": "source",
+      "totalVolume": 21,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 21,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "S3",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:26:14.182Z",
+      "updatedAt": "2026-09-09T08:52:37.184Z"
+    },
+    {
+      "id": "8b104ad7-0856-488a-8ab7-fd51634cb1cc",
+      "name": "S4",
+      "type": "source",
+      "totalVolume": 26,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 26,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "S4",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:26:35.718Z",
+      "updatedAt": "2026-09-09T08:52:29.308Z"
+    },
+    {
+      "id": "e43f4eba-3d73-406f-bd3c-164309413795",
+      "name": "E1",
+      "type": "source",
+      "totalVolume": 20,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 20,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "E1",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-09-09T08:27:42.024Z",
+      "updatedAt": "2026-09-09T08:49:36.947Z"
+    },
+    {
+      "id": "48b9166d-f19c-480d-9bc7-71016b1e94e1",
+      "name": "E2",
+      "type": "source",
+      "totalVolume": 50,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 50,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "E2",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-09-09T08:27:51.835Z",
+      "updatedAt": "2026-09-09T08:50:00.669Z"
+    },
+    {
+      "id": "316bdc3b-8f63-47d9-9ed1-491f51908d7c",
+      "name": "E3-S",
+      "type": "source",
+      "totalVolume": 25,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 25,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "E3-SH",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-09-09T08:27:58.608Z",
+      "updatedAt": "2026-11-18T07:48:59.667Z"
+    },
+    {
+      "id": "4c485891-ace7-44f7-938c-dc895d9c084a",
+      "name": "X2",
+      "type": "source",
+      "totalVolume": 21,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 21,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "X2",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:31:37.365Z",
+      "updatedAt": "2026-09-09T08:53:18.446Z"
+    },
+    {
+      "id": "4e91c1e7-aa52-4102-8596-18095452ec9f",
+      "name": "X3",
+      "type": "source",
+      "totalVolume": 21,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 21,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "X3",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:48:29.169Z",
+      "updatedAt": "2026-09-09T08:53:22.095Z"
+    },
+    {
+      "id": "51231463-3a49-4854-aefc-0c173d4f0317",
+      "name": "X4",
+      "type": "source",
+      "totalVolume": 21,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 21,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "X4",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "discarded",
+      "createdAt": "2026-09-09T08:48:57.104Z",
+      "updatedAt": "2026-09-09T08:53:25.490Z"
+    },
+    {
+      "id": "195e767a-9f6c-4bd0-8191-949f2a870b6a",
+      "name": "1M Mg",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "Mg",
+          "concentration": 1000,
+          "concentrationUnit": "mM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-09-10T07:38:20.710Z",
+      "updatedAt": "2026-11-18T08:02:41.370Z"
+    },
+    {
+      "id": "bd445add-302a-405e-91b1-97939952ef52",
+      "name": "H1",
+      "type": "source",
+      "totalVolume": 20,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 20,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "H1",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-11-18T07:49:36.468Z",
+      "updatedAt": "2026-11-18T08:02:34.702Z"
+    },
+    {
+      "id": "9dd21f01-fc37-4288-8736-3e40f0c6a788",
+      "name": "H2",
+      "type": "source",
+      "totalVolume": 100,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 100,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "H2",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-11-18T07:49:47.134Z",
+      "updatedAt": "2026-11-18T08:02:33.070Z"
+    },
+    {
+      "id": "efb83590-58a4-4818-a384-5fd0fc0be4cb",
+      "name": "Tri-a",
+      "type": "source",
+      "totalVolume": 20,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 20,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "Tri-a",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-11-18T08:01:18.413Z",
+      "updatedAt": "2026-11-18T08:06:25.748Z"
+    },
+    {
+      "id": "a3259674-6f29-4e66-911b-ca7e3b929b9a",
+      "name": "Tri-b",
+      "type": "source",
+      "totalVolume": 20,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 20,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "Tri-b",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-11-18T08:01:23.774Z",
+      "updatedAt": "2026-11-18T08:02:37.346Z"
+    },
+    {
+      "id": "bba83da1-7849-4555-924f-2fa6121a8324",
+      "name": "Tri-c",
+      "type": "source",
+      "totalVolume": 20,
+      "totalVolumeUnit": "μL",
+      "remainingVolume": 20,
+      "remainingVolumeUnit": "μL",
+      "substances": [
+        {
+          "name": "Tri-c",
+          "concentration": 100,
+          "concentrationUnit": "μM"
+        }
+      ],
+      "status": "active",
+      "createdAt": "2026-11-18T08:01:29.089Z",
+      "updatedAt": "2026-11-18T08:02:39.053Z"
+    }
+  ]
+}

@@ -72,5 +72,58 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setBackupDir: (newDir: string) => ipcRenderer.invoke('config:set-backup-dir', newDir),
     resetPaths: () => ipcRenderer.invoke('config:reset-paths'),
     restartApp: () => ipcRenderer.invoke('config:restart-app'),
+    getExportSettings: () => ipcRenderer.invoke('config:get-export-settings'),
+    setExportSettings: (settings: { directory: string; fileNameTemplate: string; autoSubfolder: boolean; scaleX: number; scaleY: number }) =>
+      ipcRenderer.invoke('config:set-export-settings', settings),
+  },
+
+  // 工程导出（.yml / .canvas / SOP 一次写出）
+  getAgentLock: () => ipcRenderer.invoke('lock:get'),
+  forceReleaseAgentLock: () => ipcRenderer.invoke('lock:forceRelease'),
+  onStoreFilesChanged: (callback: (payload: { warehouse: boolean; projects: string[] }) => void) => {
+    const listener = (_event: unknown, payload: { warehouse: boolean; projects: string[] }) => callback(payload)
+    ipcRenderer.on('store:filesChanged', listener)
+    return () => ipcRenderer.removeListener('store:filesChanged', listener)
+  },
+  onAgentLockChanged: (callback: (payload: unknown) => void) => {
+    const listener = (_event: unknown, payload: unknown) => callback(payload)
+    ipcRenderer.on('lock:changed', listener)
+    return () => ipcRenderer.removeListener('lock:changed', listener)
+  },
+  exportProject: (payload: {
+    directory?: string
+    subfolder?: string
+    files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]
+  }) => ipcRenderer.invoke('export:project', payload),
+
+  // 看板截图：传画布区域（CSS 像素），返回 PNG 的 base64（不含前缀），失败返回 null
+  captureBoard: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('export:capture-board', rect),
+
+  // 数据正本目录（工程/ 仓库/ 导出 都在它下面）
+  dataRoot: {
+    getInfo: () => ipcRenderer.invoke('data:get-info'),
+    setRoot: (root: string) => ipcRenderer.invoke('data:set-root', root),
+    listProjects: () => ipcRenderer.invoke('data:list-projects'),
+    readProject: (fileNameOrName: string) => ipcRenderer.invoke('data:read-project', fileNameOrName),
+    statProject: (fileNameOrName: string) => ipcRenderer.invoke('data:stat-project', fileNameOrName),
+    writeProject: (payload: { id?: string; name: string; content: string; expect?: { mtimeMs: number; size: number } | null }) =>
+      ipcRenderer.invoke('data:write-project', payload),
+    readWarehouse: () => ipcRenderer.invoke('data:read-warehouse'),
+    writeWarehouse: (payload: { content: string; expect?: { mtimeMs: number; size: number } | null }) =>
+      ipcRenderer.invoke('data:write-warehouse', payload),
+    writeDerived: (files: { name: string; content: string; encoding?: 'utf8' | 'base64' }[]) =>
+      ipcRenderer.invoke('data:write-derived', files),
+    askConflict: (payload: { projectName: string; fileName?: string }) =>
+      ipcRenderer.invoke('data:ask-conflict', payload),
+  },
+
+  // 深链接：笔记里点 labflow:// 链接时主进程会推过来，返回取消订阅函数
+  onOpenProject: (callback: (url: string) => void) => {
+    const handler = (_event: unknown, url: string) => callback(url)
+    ipcRenderer.on('deeplink:open', handler)
+    return () => {
+      ipcRenderer.removeListener('deeplink:open', handler)
+    }
   },
 })

@@ -97,3 +97,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 [data-theme="dark"] ::-webkit-scrollbar-thumb {
   background: var(--text-muted);
 }
+
+/* 导出图片时临时隐藏看板上的浮层（小地图、缩放控件、操作提示），截出来的图更干净 */
+body.labflow-capturing .react-flow__minimap,
+body.labflow-capturing .react-flow__controls,
+body.labflow-capturing .react-flow__panel {
+  display: none !important;
+}

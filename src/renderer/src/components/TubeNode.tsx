@@ -3,6 +3,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react'
 import { Tube, Substance } from '@shared/types'
 import { useSubstanceColorStore } from '../stores/substanceColorStore'
 import styles from './TubeNode.module.css'
+import { concentrationText, volumeText } from '../utils/tubeNodeText'
 
 interface TubeNodeData {
   tube: Tube
@@ -11,6 +12,8 @@ interface TubeNodeData {
   endStateVolume?: number
   initialVolume?: number  // 用于原料试管的初始体积
   isInWarehouse?: boolean  // 中间产物是否来自仓库
+  warehouseTotalVolume?: number   // 仓库正本里的总量（源试管用）
+  warehouseRemainingVolume?: number // 仓库正本里的余量（源试管用）
   fillPercentage?: number
   isReadOnly?: boolean
   onUpdateTube?: (tubeId: string, updates: Partial<Tube>, shouldCalculate?: boolean) => void
@@ -31,14 +34,14 @@ function SubstanceTag({ substance }: { substance: Substance }) {
 
   return (
     <div className={styles.substance}>
-      <span style={style}>{substance.name}</span>: {substance.concentration} {substance.concentrationUnit}
+      <span style={style}>{substance.name}</span>: {concentrationText(substance)}
     </div>
   )
 }
 
 function TubeNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as TubeNodeData
-  const { tube, isSource, isBuffer, endStateVolume, initialVolume, isInWarehouse, fillPercentage, isReadOnly, onUpdateTube, onOpenDetail } = nodeData
+  const { tube, isSource, isBuffer, endStateVolume, initialVolume, isInWarehouse, fillPercentage, isReadOnly, onUpdateTube, onOpenDetail, warehouseTotalVolume, warehouseRemainingVolume } = nodeData
   const { loadColors } = useSubstanceColorStore()
 
   // 内联编辑状态
@@ -178,51 +181,31 @@ function TubeNode({ data, selected }: NodeProps) {
 
   const fillHeight = fillPercentage !== undefined ? `${fillPercentage * 100}%` : '100%'
 
-  // 计算显示体积
-  const displayVolume = () => {
-    if (isBuffer) {
-      return '∞'
-    }
-
-    if (tube.type === 'sample') {
-      return `${endStateVolume || 0}`
-    }
-
-    if (tube.type === 'waste') {
-      return `${endStateVolume || 0}`
-    }
-
-    if (isSource) {
-      const beforeVolume = initialVolume !== undefined ? initialVolume : tube.remainingVolume
-      const afterVolume = endStateVolume !== undefined ? endStateVolume : tube.remainingVolume
-      return `${beforeVolume}/${afterVolume}`
-    } else {
-      if (isInWarehouse && initialVolume !== undefined) {
-        const afterVolume = endStateVolume !== undefined ? endStateVolume : initialVolume
-        return `${initialVolume}/${afterVolume}`
-      } else {
-        const targetVolume = tube.totalVolume
-        const afterVolume = endStateVolume !== undefined ? endStateVolume : 0
-        return `${targetVolume}/${afterVolume}`
-      }
-    }
-  }
+  // 计算显示体积（唯一出处：utils/tubeNodeText.ts，带单位与好读写法）
+  const displayVolume = () =>
+    volumeText({
+      tube,
+      isSource,
+      isBuffer,
+      warehouseTotalVolume,
+      warehouseRemainingVolume,
+      endStateVolume
+    })
 
   // 体积行:非 asSource 的中间产物可编辑目标体积
   const renderVolumeContent = () => {
-    if (canInlineEdit && !isInWarehouse) {
-      // 新创建的中间产物:可编辑目标体积
-      const parts = displayVolume().split('/')
-      if (parts.length === 2) {
-        return (
-          <>
-            {renderEditableField('totalVolume', parts[0], tube.totalVolume, 'number', { min: '0', step: '0.1' })}
-            /{parts[1]} {tube.remainingVolumeUnit}
-          </>
-        )
-      }
+    const text = displayVolume()
+    if (canInlineEdit && !isInWarehouse && text.includes('/')) {
+      // 新创建的中间产物:可编辑目标体积（右半格连同单位一起原样显示）
+      const [left, right] = text.split('/')
+      return (
+        <>
+          {renderEditableField('totalVolume', left, tube.totalVolume, 'number', { min: '0', step: '0.1' })}
+          /{right}
+        </>
+      )
     }
-    return <>{displayVolume()} {tube.remainingVolumeUnit}</>
+    return <>{text}</>
   }
 
   const getNodeClass = () => {
@@ -318,9 +301,8 @@ function TubeNode({ data, selected }: NodeProps) {
                         onClick={(e) => { e.stopPropagation(); startEdit(`conc-${i}`, s.concentration) }}
                         title="点击编辑浓度"
                       >
-                        {s.concentration}
-                      </span>{' '}
-                      {s.concentrationUnit}
+                        {concentrationText(s)}
+                      </span>
                     </div>
                   )
                 }

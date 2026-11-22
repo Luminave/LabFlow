@@ -6,39 +6,57 @@
 }
 
 .pageHeader {
-  padding: var(--spacing-lg);
+  /* 统一骨架基准：padding 24/32，标题左对齐 */
+  padding: 24px 32px;
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-color);
+  box-sizing: border-box;
 }
 
 .pageTitle {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.25;
   color: var(--text-primary);
   margin: 0;
 }
 
 .toolbar {
-  padding: var(--spacing-md) var(--spacing-lg);
+  padding: 24px 32px 16px 32px;
   background: var(--surface-color);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* 宽度不够时整组换到下一行，绝不把按钮挤出窗口 */
   flex-wrap: wrap;
   gap: var(--spacing-sm);
+  row-gap: 8px;
+  /* 兜底：极端窄窗口下宁可横向滚动，也不要出现点不到的按钮 */
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .toolbarLeft {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+  row-gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .toolbarRight {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  row-gap: 8px;
+  /* 允许它占用剩余宽度并内部换行；min-width:0 是让 flex 真的肯收缩的关键 */
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* 工具栏分组 */
@@ -46,6 +64,9 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  row-gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 /* 分组竖线分隔符 */
@@ -59,6 +80,7 @@
 
 /* 统一工具栏按钮 */
 .toolbarBtn {
+  flex: 0 0 auto;
   padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -78,6 +100,7 @@
 
 /* 结束实验按钮（绿色强调） */
 .toolbarBtnAccent {
+  flex: 0 0 auto;
   padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--success-color);
   border-radius: var(--radius-md);
@@ -97,6 +120,7 @@
 
 /* 新建耗损实验按钮（橙色警告） */
 .toolbarBtnWarn {
+  flex: 0 0 auto;
   padding: var(--spacing-xs) var(--spacing-md);
   border: 1px solid var(--warning-color, #f59e0b);
   border-radius: var(--radius-md);
@@ -119,6 +143,9 @@
 }
 
 .experimentNameInput {
+  flex: 0 0 auto;
+  max-width: 100%;
+  white-space: nowrap;
   padding: var(--spacing-sm) var(--spacing-md);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -131,6 +158,8 @@
 }
 
 .startBtn, .completeBtn, .saveBtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--primary-color);
   color: white;
@@ -167,6 +196,7 @@
 .experimentName {
   font-size: 18px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .experimentStatus {
@@ -184,6 +214,9 @@
   font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
+  /* 关键：不允许被压窄后逐字换行（「显示/缓冲/液」） */
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .addTubeBtn {
@@ -587,6 +620,8 @@
 
 /* 工程管理样式 */
 .openBtn, .newBtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-color);
   color: var(--text-color);
@@ -774,6 +809,8 @@
   gap: var(--spacing-xs);
   font-size: 13px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .bufferSelect {
@@ -783,6 +820,8 @@
   background: white;
   font-size: 13px;
   cursor: pointer;
+  flex: 0 0 auto;
+  min-width: 96px;
 }
 
 .bufferSelect:focus {
@@ -957,6 +996,8 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  flex: 0 0 auto;
+  white-space: nowrap;
   margin-left: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
   background: var(--surface-color);
@@ -966,6 +1007,7 @@
 
 .dateInput {
   width: 70px;
+  flex: 0 0 auto;
   padding: 4px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -1037,4 +1079,132 @@
 
 .wasteAddBtn:hover {
   background: #6d28d9;
+}
+
+/* 保存 / 导出的轻提示（2026-11-22 加：保存后自动导出需要一句话反馈，不弹窗） */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  max-width: 72vw;
+  padding: 10px 16px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary, #1f2937);
+  border: 1px solid var(--border-color, #e5e7eb);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.16);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  animation: toastInOut 2.6s ease forwards;
+}
+
+@keyframes toastInOut {
+  0% { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  12% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 工程正本被外部修改时的顶部提示条（不弹窗，点「重新载入」才动数据） */
+.fileChangedBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 32px;
+  background: var(--warning-bg, #fef3c7);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+
+.fileChangedBtn {
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--primary-color);
+  background: var(--primary-color);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.fileChangedBtnGhost {
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* 顶部 Agent 锁提示条（第 2 步） */
+.agentLockBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 32px 12px 32px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #f2c94c;
+  background: #fff8e1;
+  color: #7a5b00;
+  font-size: 14px;
+}
+
+.agentLockStale {
+  border-color: #eb5757;
+  background: #fff1f1;
+  color: #a12626;
+}
+
+.agentLockSoft {
+  border-color: var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+}
+
+.agentLockText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.agentLockBtn {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.agentLockBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* 冻结时顶栏整体变灰且不可点（画布仍可缩放/平移查看） */
+.toolbarFrozen {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* 已结束工程：顶部只读提示（第 4 步 A） */
+.readOnlyBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 32px 12px 32px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+  color: var(--text-secondary);
+  font-size: 13px;
 }

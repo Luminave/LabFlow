@@ -4,6 +4,7 @@ import { useExperimentStore } from '../stores/experimentStore'
 import { useWarehouseStore } from '../stores/warehouseStore'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
+import { singleText } from '../utils/tubeNodeText'
 import styles from './HistoryPage.module.css'
 
 export default function HistoryPage() {
@@ -246,9 +247,9 @@ export default function HistoryPage() {
                         </div>
                         <div className={styles.tubeVolume}>
                           {tube.isBufferUsage ? (
-                            <span>{language === 'zh' ? '消耗' : 'Used'} {tube.remainingVolume} {tube.remainingVolumeUnit}</span>
+                            <span>{language === 'zh' ? '消耗' : 'Used'} {singleText(tube.remainingVolume, tube.remainingVolumeUnit || 'μL')}</span>
                           ) : (
-                            tube.remainingVolume === Infinity ? '∞' : `${tube.remainingVolume} ${tube.remainingVolumeUnit}`
+                            singleText(tube.remainingVolume, tube.remainingVolumeUnit || 'μL')
                           )}
                         </div>
                       </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
@@ -12,20 +12,51 @@ import {
   Node,
   Edge,
   Panel,
+  useReactFlow,
   NodeTypes,
   EdgeTypes
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { useWarehouseStore } from '../stores/warehouseStore'
-import { useExperimentStore } from '../stores/experimentStore'
+import { getProjectFileInfo, useExperimentStore } from '../stores/experimentStore'
+import {
+  ProjectFileConflictError,
+  isProjectFileAvailable,
+  reloadProjectSource,
+  statProjectSource
+} from '../utils/projectSource'
 import { useI18nStore } from '../stores/i18nStore'
 import { t } from '../i18n/translations'
 import { Tube, Substance, ConcentrationUnit, VolumeUnit, TransferConnection } from '@shared/types'
 import { roundVolume } from '@shared/utils/calculations'
+import { computeEndState } from '@/core/endState'
+import { concentrationText, singleText } from '../utils/tubeNodeText'
+import { formatLockBanner, type ParsedAgentLock } from '@/core/lock'
+import { computeMixture, sourcesIntoTube, solveRequiredVolumes } from '@/core/mix'
+import { validateExperiment } from '@/core/validate'
+import { formatCheckIssues } from './experimentCheckMessages'
+import { projectInputFromExperiment } from '@/core/exporters'
+import { describeExportOutcome, runProjectExport } from '../utils/projectExport'
+import { setBoardCaptureSource } from '../utils/boardCapture'
 import TubeNode from '../components/TubeNode'
 import TransferEdge from '../components/TransferEdge'
 import styles from './ExperimentPage.module.css'
+
+/** 把看板的 fitView 登记给导出流程用（导出图片时要先让整张图进视野再截图） */
+function BoardCaptureBridge({ experimentId }: { experimentId: string }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    setBoardCaptureSource({
+      experimentId,
+      fitView: async () => {
+        await fitView({ padding: 0.12, duration: 0 })
+      }
+    })
+    return () => setBoardCaptureSource(null)
+  }, [experimentId, fitView])
+  return null
+}
 
 const nodeTypes: NodeTypes = { tube: TubeNode }
 const edgeTypes: EdgeTypes = { transfer: TransferEdge }
@@ -57,6 +88,7 @@ export default function ExperimentPage() {
     completeExperiment,
     saveCurrentExperiment,
     saveAsExperiment,
+    reloadExperimentFromFile,
     loadExperiment,
     deleteExperiment,
     fetchExperiments,
@@ -90,291 +122,116 @@ export default function ExperimentPage() {
   const [syncTubeName, setSyncTubeName] = useState(false) // 同步修改试管名称
 
   // 动态计算结束状态
+  // 动态计算结束状态（内核：统一「查仓库」口径）
   const calculateEndStateDynamic = (tubes: Tube[], conns: TransferConnection[]): Tube[] => {
-    // 计算每个试管的移入和移出体积
-    const tubeInVolume = new Map<string, number>()
-    const tubeOutVolume = new Map<string, number>()
-
-    for (const conn of conns) {
-      if (conn.volume <= 0) continue
-      tubeInVolume.set(conn.toTubeId, (tubeInVolume.get(conn.toTubeId) || 0) + conn.volume)
-      tubeOutVolume.set(conn.fromTubeId, (tubeOutVolume.get(conn.fromTubeId) || 0) + conn.volume)
-    }
-
-    return tubes.map(tube => {
-      const inVolume = tubeInVolume.get(tube.id) || 0
-      const outVolume = tubeOutVolume.get(tube.id) || 0
-
-      // 计算结束体积
-      let endVolume: number
-      if (tube.type === 'source') {
-        // 原料试管:使用仓库中的初始体积 - 移出体积
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        const initialVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-        endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
-      } else if (tube.type === 'buffer') {
-        // 缓冲液:保持不变
-        endVolume = tube.remainingVolume
-      } else if (tube.type === 'intermediate') {
-        // 中间产物:判断是从仓库添加的还是新创建的
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        const isInWarehouse = !!whTube
-
-        if (isInWarehouse) {
-          // 从仓库添加的中间产物:当作原料处理
-          const initialVolume = whTube.remainingVolume
-          endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
-        } else {
-          // 新创建的中间产物:移入体积 - 移出体积
-          endVolume = roundVolume(Math.max(0, inVolume - outVolume))
-        }
-      } else {
-        endVolume = tube.remainingVolume
-      }
-
-      // 浓度保持不变
-      return {
-        ...tube,
-        remainingVolume: endVolume,
-        totalVolume: endVolume
-      }
-    })
+    return computeEndState({ tubes, connections: conns, warehouseTubes })
   }
 
   // 是否为只读模式(已完成的实验)
   const isReadOnly = currentExperiment?.status === 'completed' || currentExperiment?.status === 'reverted'
 
-  // 检查实验问题
-  const handleCheckExperiment = () => {
-    const errors: {tubeId: string; tubeName: string; type: string; message: string}[] = []
+  // 保存 / 导出的轻提示（不弹窗，2.6 秒自己消失）
+  const [saveToast, setSaveToast] = useState<{ text: string; key: number } | null>(null)
+  const toastTimer = useRef<number | null>(null)
+  const showSaveToast = useCallback((text: string) => {
+    setSaveToast({ text, key: Date.now() })
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setSaveToast(null), 2600)
+  }, [])
 
-    // 计算每个试管的移入和移出体积
-    const tubeInVolume = new Map<string, number>()
-    const tubeOutVolume = new Map<string, number>()
+  // —— 工程正本（工程/<工程名>.yml）被外部修改的检测与提示 ——
+  const [fileChanged, setFileChanged] = useState(false)
 
-    for (const conn of connections) {
-      if (conn.volume <= 0) continue
-      tubeInVolume.set(conn.toTubeId, (tubeInVolume.get(conn.toTubeId) || 0) + conn.volume)
-      tubeOutVolume.set(conn.fromTubeId, (tubeOutVolume.get(conn.fromTubeId) || 0) + conn.volume)
-    }
+  // 主进程发现「当前工程文件被外部改了」且界面有未保存改动 → 只挂提示条，不覆盖
+  useEffect(() => {
+    const onExternalChange = () => setFileChanged(true)
+    window.addEventListener('labflow:projectFileChanged', onExternalChange)
+    return () => window.removeEventListener('labflow:projectFileChanged', onExternalChange)
+  }, [])
 
-    // 1. 检查试管输出体积是否大于输入体积,或原料试管输出是否大于剩余体积
-    for (const tube of currentTubes) {
-      const outVolume = tubeOutVolume.get(tube.id) || 0
-      const inVolume = tubeInVolume.get(tube.id) || 0
-
-      if (tube.type === 'source') {
-        // 原料试管:检查输出是否大于仓库中的剩余体积
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        const availableVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-        if (outVolume > availableVolume) {
-          errors.push({
-            tubeId: tube.id,
-            tubeName: tube.name,
-            type: 'volume_exceed',
-            message: `${language === 'zh' ? '原料试管输出体积' : 'Source output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于可用体积' : 'exceeds available'}(${availableVolume.toFixed(2)})`
-          })
-        }
-      } else if (tube.type === 'intermediate') {
-        // 如果试管标记为"作为原料",跳过体积检查(因为它没有输入是正常的)
-        if (tube.asSource) continue
-
-        // 中间产物:检查是否是从仓库添加的
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        if (whTube) {
-          // 从仓库添加的中间产物:当作原料处理
-          if (outVolume > whTube.remainingVolume) {
-            errors.push({
-              tubeId: tube.id,
-              tubeName: tube.name,
-              type: 'volume_exceed',
-              message: `${language === 'zh' ? '中间产物试管输出体积' : 'Intermediate output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于仓库中可用体积' : 'exceeds warehouse available'}(${whTube.remainingVolume.toFixed(2)})`
-            })
-          }
-        } else {
-          // 新创建的中间产物:检查输出是否大于输入
-          if (outVolume > inVolume) {
-            errors.push({
-              tubeId: tube.id,
-              tubeName: tube.name,
-              type: 'volume_exceed',
-              message: `${language === 'zh' ? '中间产物试管输出体积' : 'Intermediate output volume'}(${outVolume.toFixed(2)})${language === 'zh' ? '大于输入体积' : 'exceeds input volume'}(${inVolume.toFixed(2)})`
-            })
-          }
-        }
-      }
-    }
-
-    // 2. 检查中间产物是否需要缓冲液补足但没有缓冲液
-    for (const tube of currentTubes) {
-      if (tube.type !== 'intermediate') continue
-
-      // 检查是否有缓冲液连线
-      const hasBufferConnection = connections.some(c => {
-        const fromTube = currentTubes.find(t => t.id === c.fromTubeId)
-        return c.toTubeId === tube.id && fromTube?.type === 'buffer' && c.volume > 0
-      })
-
-      // 检查是否设置了缓冲液
-      const hasSelectedBuffer = tube.selectedBuffer || currentExperiment?.defaultBuffer
-
-      // 计算总输入体积和目标体积
-      const inVolume = tubeInVolume.get(tube.id) || 0
-      const targetVolume = tube.totalVolume || 0
-
-      // 如果目标体积大于输入体积,需要缓冲液补足
-      if (targetVolume > inVolume && !hasBufferConnection && !hasSelectedBuffer) {
-        errors.push({
-          tubeId: tube.id,
-          tubeName: tube.name,
-          type: 'buffer_missing',
-          message: `${language === 'zh' ? '中间产物需要缓冲液补足' : 'Intermediate needs buffer fill'}(${(targetVolume - inVolume).toFixed(2)}),${language === 'zh' ? '但未连接缓冲液' : 'but no buffer connected'}`
-        })
-      }
-    }
-
-    // 3. 检查子试管是否需要某种成分但没有连线到含有该成分的父试管
-    for (const tube of currentTubes) {
-      if (tube.type !== 'intermediate' || tube.substances.length === 0) continue
-
-      // 如果试管标记为"作为原料",跳过成分来源检查
-      if (tube.asSource) continue
-
-      // 获取连接到此试管的所有源试管
-      const incomingConns = connections.filter(c => c.toTubeId === tube.id)
-      const sourceTubes = incomingConns
-        .map(c => currentTubes.find(t => t.id === c.fromTubeId))
-        .filter(t => t && t.type !== 'buffer') as Tube[]
-
-      // 检查每种目标物质是否有来源
-      for (const targetSub of tube.substances) {
-        if (!targetSub.name || targetSub.concentration <= 0) continue
-
-        const hasSource = sourceTubes.some(sourceTube =>
-          sourceTube.substances.some(s => s.name === targetSub.name)
-        )
-
-        if (!hasSource) {
-          errors.push({
-            tubeId: tube.id,
-            tubeName: tube.name,
-            type: 'substance_source_missing',
-            message: `${language === 'zh' ? '需要成分' : 'Needs substance'}"${targetSub.name}",${language === 'zh' ? '但没有连线到含有该成分的源试管' : 'but no connection to tube containing it'}`
-          })
-        }
-      }
-    }
-
-    // 4. 检查所有试管计算是否正确
-    for (const tube of currentTubes) {
-      if (tube.type === 'sample' || tube.type === 'waste') continue
-
-      // 如果试管标记为"作为原料",跳过计算检查(因为它没有输入是正常的)
-      if (tube.asSource) continue
-
-      const inVolume = tubeInVolume.get(tube.id) || 0
-      const outVolume = tubeOutVolume.get(tube.id) || 0
-      const incomingConns = connections.filter(c => c.toTubeId === tube.id)
-
-      // 计算所有输入连线的体积总和
-      const totalInputFromConnections = incomingConns.reduce((sum, c) => sum + (c.volume || 0), 0)
-
-      // 对于中间产物,检查连线体积是否与目标体积匹配
-      if (tube.type === 'intermediate' && tube.totalVolume > 0) {
-        // 检查是否有缓冲液连线
-        const bufferVolume = incomingConns
-          .filter(c => currentTubes.find(t => t.id === c.fromTubeId)?.type === 'buffer')
-          .reduce((sum, c) => sum + (c.volume || 0), 0)
-
-        const nonBufferInput = totalInputFromConnections - bufferVolume
-        const expectedBufferVolume = tube.totalVolume - nonBufferInput
-
-        // 如果目标体积与实际输入不匹配(且差异超过0.1)
-        if (Math.abs(totalInputFromConnections - tube.totalVolume) > 0.1) {
-          errors.push({
-            tubeId: tube.id,
-            tubeName: tube.name,
-            type: 'calculation_error',
-            message: `${language === 'zh' ? '目标体积' : 'Target volume'}(${tube.totalVolume})${language === 'zh' ? '与实际输入体积' : 'vs actual input'}(${totalInputFromConnections.toFixed(2)})${language === 'zh' ? '不匹配' : 'mismatch'}`
-          })
-        }
-      }
-    }
-
-    // 5. 检查是否有试管定义了成分但浓度为0
-    for (const tube of currentTubes) {
-      for (const sub of tube.substances) {
-        if (sub.name && sub.name.trim() !== '' && sub.concentration === 0) {
-          errors.push({
-            tubeId: tube.id,
-            tubeName: tube.name,
-            type: 'zero_concentration',
-            message: `${language === 'zh' ? '定义了成分' : 'Substance'}"${sub.name}"${language === 'zh' ? '但浓度为0' : 'has zero concentration'}`
-          })
-        }
-      }
-    }
-
-    // 6. 检查配置序号（讲述者功能需要）
-    const intermediateTubes = currentTubes.filter(
-      t => t.type === 'intermediate' && !t.asSource
+  /** 用文件里的内容覆盖当前工程 */
+  const reloadFromFile = useCallback(async () => {
+    const current = useExperimentStore.getState().currentExperiment
+    if (!current) return
+    const ok = await reloadExperimentFromFile(current.id)
+    setFileChanged(false)
+    showSaveToast(
+      ok
+        ? language === 'zh' ? '已重新载入工程文件' : 'Reloaded from project file'
+        : language === 'zh' ? '读不到工程文件' : 'Project file not readable'
     )
+  }, [reloadExperimentFromFile, showSaveToast, language])
 
-    // 检查是否有未设置序号的中间产物
-    for (const tube of intermediateTubes) {
-      if (!tube.configOrder) {
-        errors.push({
-          tubeId: tube.id,
-          tubeName: tube.name,
-          type: 'config_order_missing',
-          message: language === 'zh' ? '中间产物试管未设置配置序号（讲述者需要）' : 'Intermediate tube has no config order (required by Narrator)'
-        })
-      } else if (tube.configOrder <= 0 || !Number.isInteger(tube.configOrder)) {
-        errors.push({
-          tubeId: tube.id,
-          tubeName: tube.name,
-          type: 'config_order_invalid',
-          message: `${language === 'zh' ? '配置序号必须是正整数，当前值:' : 'Config order must be positive integer, current:'} ${tube.configOrder}`
-        })
-      }
+  /** 窗口获得焦点时看一眼：文件 mtime/size 变了就在顶栏挂提示条（不弹窗） */
+  useEffect(() => {
+    if (!isProjectFileAvailable()) return
+    const check = async () => {
+      const current = useExperimentStore.getState().currentExperiment
+      if (!current) return
+      const info = getProjectFileInfo(current.id)
+      if (!info?.stat) return
+      const stat = await statProjectSource(info.fileName)
+      if (!stat) return
+      const changed =
+        Math.abs(stat.mtimeMs - info.stat.mtimeMs) > 1 || stat.size !== info.stat.size
+      if (changed) setFileChanged(true)
     }
+    const onFocus = () => { void check() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
-    // 检查序号是否有重复
-    const orderCounts = new Map<number, string[]>()
-    for (const tube of intermediateTubes) {
-      if (tube.configOrder) {
-        const existing = orderCounts.get(tube.configOrder) || []
-        existing.push(tube.name)
-        orderCounts.set(tube.configOrder, existing)
-      }
-    }
-    for (const [order, tubeNames] of orderCounts) {
-      if (tubeNames.length > 1) {
-        errors.push({
-          tubeId: '',
-          tubeName: tubeNames.join(', '),
-          type: 'config_order_duplicate',
-          message: `${language === 'zh' ? '配置序号' : 'Config order'} ${order} ${language === 'zh' ? '重复使用（' : 'duplicated ('}${tubeNames.join(', ')}${language === 'zh' ? '）' : ')'}`
-        })
-      }
-    }
+  // —— Agent 锁（第 2 步）——
+  const [agentLock, setAgentLock] = useState<ParsedAgentLock>(null)
+  const [lockNow, setLockNow] = useState(() => Date.now())
 
-    // 检查序号是否有跳过
-    if (intermediateTubes.length > 0 && orderCounts.size > 0) {
-      const orders = Array.from(orderCounts.keys()).sort((a, b) => a - b)
-      for (let i = 1; i < orders.length; i++) {
-        if (orders[i] - orders[i - 1] > 1) {
-          errors.push({
-            tubeId: '',
-            tubeName: '',
-            type: 'config_order_gap',
-            message: `${language === 'zh' ? '配置序号有跳过：从' : 'Config order gap: from'} ${orders[i - 1]} ${language === 'zh' ? '跳到' : 'to'} ${orders[i]}`
-          })
-        }
-      }
+  useEffect(() => {
+    let alive = true
+    const apply = (payload: ParsedAgentLock) => {
+      if (alive) setAgentLock(payload ?? null)
     }
+    window.electronAPI?.getAgentLock?.().then(apply).catch(() => {})
+    const unsubscribe = window.electronAPI?.onAgentLockChanged?.(apply)
+    // 「已 X 分钟」要自己往前走，30 秒刷新一次
+    const timer = window.setInterval(() => setLockNow(Date.now()), 30000)
+    return () => {
+      alive = false
+      unsubscribe?.()
+      window.clearInterval(timer)
+    }
+  }, [])
 
-    setCheckErrors(errors)
+  const rawLockBanner = formatLockBanner(
+    agentLock,
+    { name: currentExperiment?.name, id: currentExperiment?.id },
+    lockNow
+  )
+  // 没打开工程时不必提示「别的工程被锁」，只有本工程被锁才一定提示
+  const lockBanner = rawLockBanner && rawLockBanner.level === 'other' && !currentExperiment ? null : rawLockBanner
+  const frozenByAgent = Boolean(lockBanner?.freeze) && !isReadOnly
+
+  const forceReleaseLock = useCallback(async () => {
+    const ok = window.confirm('Agent 可能仍在写文件，强制解锁可能导致冲突，确定吗？')
+    if (!ok) return
+    const result = await window.electronAPI?.forceReleaseAgentLock?.()
+    if (result?.ok) {
+      setAgentLock(null)
+      showSaveToast(language === 'zh' ? '已强制解锁' : 'Lock released')
+    } else {
+      showSaveToast(language === 'zh' ? '解锁失败：' + (result?.error || '未知错误') : 'Failed to release lock')
+    }
+  }, [showSaveToast, language])
+
+  // 检查实验问题
+  // 检查实验问题（内核校验 + UI 文案）
+  const handleCheckExperiment = () => {
+    const issues = validateExperiment({
+      tubes: currentTubes,
+      connections,
+      warehouseTubes,
+      defaultBuffer: currentExperiment?.defaultBuffer
+    })
+    setCheckErrors(formatCheckIssues(issues, currentTubes, language))
     setShowCheckResult(true)
   }
 
@@ -660,6 +517,9 @@ export default function ExperimentPage() {
             endStateVolume: endVolumeMap.get(tube.id),
             initialVolume: initialVolumeMap.get(tube.id),
             isInWarehouse: isInWarehouseMap.get(tube.id),
+            // 源试管的两格体积都取仓库正本（仓库.yml → warehouseStore）
+            warehouseTotalVolume: warehouseTubes.find(t => t.id === tube.id)?.totalVolume,
+            warehouseRemainingVolume: warehouseTubes.find(t => t.id === tube.id)?.remainingVolume,
             isReadOnly,
             onUpdateTube: handleInlineUpdate,
             onOpenDetail: handleOpenDetail
@@ -760,47 +620,13 @@ export default function ExperimentPage() {
     // 双击不弹出输入框,保留数字显示和拖动功能
   }, [])
 
-  // 浓度单位转μM的因子
-  const concToUM: Record<string, number> = { 'nM': 0.001, 'μM': 1, 'mM': 1000, 'M': 1000000 }
 
   // 计算目标试管的物质组成
+  // 计算目标试管的物质组成（内核：先归一到 μM·μL 再算）
   const recalculateTargetTube = (targetId: string) => {
-    const incomingConns = connections.filter(c => c.toTubeId === targetId)
-
-    let totalVolume = 0
-    const substanceMap = new Map<string, { moles: number; unit: string }>()
-
-    for (const conn of incomingConns) {
-      const vol = conn.volume
-      if (vol === 0) continue
-
-      const sourceTube = currentTubes.find(t => t.id === conn.fromTubeId)
-      if (!sourceTube || sourceTube.type === 'buffer') continue
-
-      totalVolume += vol
-
-      for (const sub of sourceTube.substances) {
-        const concInUM = sub.concentration * (concToUM[sub.concentrationUnit] || 1)
-        const moles = concInUM * vol
-        const existing = substanceMap.get(sub.name)
-        if (existing) {
-          existing.moles += moles
-        } else {
-          substanceMap.set(sub.name, { moles, unit: sub.concentrationUnit })
-        }
-      }
-    }
-
-    const newSubstances: Substance[] = []
-    substanceMap.forEach((data, name) => {
-      const finalConcUM = data.moles / totalVolume
-      const factor = concToUM[data.unit as string] || 1
-      newSubstances.push({
-        name,
-        concentration: Math.round((finalConcUM / factor) * 1000) / 1000,
-        concentrationUnit: data.unit as ConcentrationUnit
-      })
-    })
+    const sources = sourcesIntoTube(connections, currentTubes, targetId)
+    const newSubstances = computeMixture(sources, { unitMode: 'first', decimals: 3 }) as Substance[]
+    const totalVolume = sources.reduce((sum, s) => sum + s.volume, 0)
 
     updateTubeInExperiment(targetId, {
       substances: newSubstances,
@@ -956,38 +782,20 @@ export default function ExperimentPage() {
 
     const targetVolume = formData.targetVolume
 
-    // 按源试管分组,计算每个源试管需要的移液体积
-    const sourceTubeVolumes = new Map<string, number>()
-    let hasMissingSource = false
-    const missingSubstances: string[] = []
-
-    for (const targetSub of formData.substances) {
-      if (!targetSub.name || targetSub.concentration <= 0) continue
-
-      let foundSource = false
-      for (const conn of incomingConns) {
+    // 按源试管分组,计算每个源试管需要的移液体积（内核：先归一到 μM 再反算）
+    const { volumes: sourceTubeVolumes, missingSubstances } = solveRequiredVolumes({
+      targetSubstances: formData.substances,
+      targetVolume,
+      sources: incomingConns.map(conn => {
         const sourceTube = freshCurrentTubes.find(t => t.id === conn.fromTubeId)
-        if (!sourceTube || sourceTube.type === 'buffer') continue
-
-        const sourceSub = sourceTube.substances.find(s => s.name === targetSub.name)
-        if (!sourceSub) continue
-
-        // 标准化浓度到μM再计算
-        const targetConcUM = targetSub.concentration * (concToUM[targetSub.concentrationUnit] || 1)
-        const sourceConcUM = sourceSub.concentration * (concToUM[sourceSub.concentrationUnit] || 1)
-        const requiredVolume = (targetConcUM * targetVolume) / sourceConcUM
-        const existingVolume = sourceTubeVolumes.get(conn.fromTubeId) || 0
-        sourceTubeVolumes.set(conn.fromTubeId, Math.max(existingVolume, requiredVolume))
-
-        foundSource = true
-        break
-      }
-
-      if (!foundSource) {
-        hasMissingSource = true
-        missingSubstances.push(targetSub.name)
-      }
-    }
+        return {
+          tubeId: conn.fromTubeId,
+          type: sourceTube ? sourceTube.type : ('source' as Tube['type']),
+          substances: sourceTube ? sourceTube.substances : []
+        }
+      })
+    })
+    const hasMissingSource = missingSubstances.length > 0
 
     if (hasMissingSource) {
       if (!silent) alert(`${language === 'zh' ? '以下物质找不到源试管:' : 'Cannot find source for:'} ${missingSubstances.join(', ')}\n${language === 'zh' ? '请确保已从包含这些物质的试管连线到此试管。' : 'Make sure to connect from tubes containing these substances.'}`)
@@ -1307,13 +1115,93 @@ export default function ExperimentPage() {
     setEdges([])
   }
 
-  // 保存实验
-  const handleSaveExperiment = async () => {
-    const success = await saveCurrentExperiment()
+  // 保存实验：存库成功后，按导出设置决定要不要顺手重新导出（主人 2026-11-22 要的）
+  const handleSaveExperiment = async (options: { forceFile?: boolean } = {}) => {
+    const zh = language === 'zh'
+    let success: boolean | void
+
+    try {
+      success = await saveCurrentExperiment(undefined, options)
+    } catch (error) {
+      if (error instanceof ProjectFileConflictError) {
+        // 文件被别人改过：绝不默默覆盖，先问主人（默认按钮是「重新载入」）
+        const choice = await window.electronAPI?.dataRoot?.askConflict?.({
+          projectName: error.fileName.replace(/.yml$/, ''),
+          fileName: error.fileName
+        })
+        if (choice === 'reload') {
+          await reloadFromFile()
+          return
+        }
+        if (choice === 'overwrite') {
+          await handleSaveExperiment({ forceFile: true })
+          return
+        }
+        showSaveToast(zh ? '已取消保存（文件未改动）' : 'Save cancelled (file untouched)')
+        return
+      }
+      throw error
+    }
+
+
     if (success === false) {
-      alert(language === 'zh' ? '⚠️ 数据库保存失败，已保存到本地存储。请检查控制台日志。' : '⚠️ Database save failed, saved to local storage. Check console for details.')
+      showSaveToast(
+        zh ? '⚠️ 数据库保存失败，已保存到本地存储。请检查控制台日志。' : '⚠️ Database save failed, saved to local storage.'
+      )
+      return
+    }
+
+    // 保存成功后拿最新的 currentExperiment 去导出（store 里已经换成这份了）
+    const saved = useExperimentStore.getState().currentExperiment
+    if (!saved) {
+      showSaveToast(zh ? '实验已保存' : 'Experiment saved')
+      return
+    }
+
+    let settings = null
+    try {
+      settings = await window.electronAPI?.config?.getExportSettings?.()
+    } catch {
+      settings = null
+    }
+
+    if (!settings || !settings.autoExportOnSave) {
+      showSaveToast(zh ? '实验已保存' : 'Experiment saved')
+      return
+    }
+
+    // 派生件（SOP + 截图）写到数据正本的 导出/ 目录；白板与数据文件默认不导
+    let exportDir = settings.directory
+    try {
+      const info = await window.electronAPI?.dataRoot?.getInfo?.()
+      if (info?.ok && info.exportDir) exportDir = info.exportDir
+    } catch {
+      /* 拿不到目录信息就退回设置里的目录 */
+    }
+
+    const outcome = await runProjectExport({
+      input: projectInputFromExperiment(saved),
+      settings: {
+        ...settings,
+        directory: exportDir,
+        autoSubfolder: false,
+        exportCanvasFile: settings.exportCanvasFile === true,
+        exportDataFile: false
+      },
+      auto: true
+    })
+
+    if (outcome.ok) {
+      const base = zh ? `已保存并导出 ${outcome.count} 个文件` : `Saved and exported ${outcome.count} file(s)`
+      showSaveToast(
+        outcome.imageSkipped ? `${base}${zh ? '（流程图要在这根工程的白板上才能截图，这次没出图）' : ' (board screenshot skipped)'}` : base
+      )
+    } else if (outcome.skipped === 'no-directory') {
+      showSaveToast(zh ? '实验已保存；未设置导出目录，未自动导出' : 'Saved; no export folder set — skipped exporting')
+    } else if (outcome.skipped === 'busy') {
+      showSaveToast(zh ? '实验已保存；上一次导出还没写完，已跳过' : 'Saved; previous export still running — skipped')
     } else {
-      alert(language === 'zh' ? '实验已保存!' : 'Experiment saved!')
+      showSaveToast(`${zh ? '实验已保存，但导出失败：' : 'Saved, but export failed: '}${describeExportOutcome(outcome, zh ? 'zh' : 'en')}`)
     }
   }
 
@@ -1433,7 +1321,7 @@ export default function ExperimentPage() {
         <h1 className={styles.pageTitle}>{t('nav.experiment', language)}</h1>
       </div>
 
-      <header className={styles.toolbar}>
+      <header className={`${styles.toolbar} ${frozenByAgent ? styles.toolbarFrozen : ''}`}>
         <div className={styles.toolbarLeft}>
           {!currentExperiment ? (
             <div className={styles.newExperiment}>
@@ -1591,7 +1479,7 @@ export default function ExperimentPage() {
               )}
 
               {!isReadOnly && (
-                <button className={styles.toolbarBtn} onClick={handleSaveExperiment}>
+                <button className={styles.toolbarBtn} onClick={() => void handleSaveExperiment()}>
                   💾 {t('toolbar.save', language)}
                 </button>
               )}
@@ -1600,7 +1488,48 @@ export default function ExperimentPage() {
         )}
       </header>
 
-      <div className={styles.canvas}>
+      {fileChanged && (
+        <div className={styles.fileChangedBanner} role="status">
+          <span>
+            ⚠️ {language === 'zh'
+              ? `工程文件已被外部修改：${getProjectFileInfo(currentExperiment?.id || '')?.fileName || ''}`
+              : `Project file changed outside LabFlow: ${getProjectFileInfo(currentExperiment?.id || '')?.fileName || ''}`}
+          </span>
+          <button className={styles.fileChangedBtn} onClick={() => void reloadFromFile()}>
+            {language === 'zh' ? '重新载入' : 'Reload'}
+          </button>
+          <button className={styles.fileChangedBtnGhost} onClick={() => setFileChanged(false)}>
+            {language === 'zh' ? '先不管' : 'Dismiss'}
+          </button>
+        </div>
+      )}
+
+      {isReadOnly && currentExperiment && (
+        <div className={styles.readOnlyBanner}>
+          <span>
+            {language === 'zh'
+              ? `🔒 这个工程已结束（${currentExperiment.completedAt ? currentExperiment.completedAt.slice(0, 10) : '已结束'}），只读查看`
+              : '🔒 This experiment has ended — view only'}
+          </span>
+        </div>
+      )}
+
+      {lockBanner && (
+        <div
+          className={`${styles.agentLockBanner} ${lockBanner.level === 'stale' ? styles.agentLockStale : ''} ${
+            lockBanner.level === 'other' || lockBanner.level === 'broken' ? styles.agentLockSoft : ''
+          }`}
+        >
+          <span className={styles.agentLockText}>{lockBanner.text}</span>
+          {lockBanner.level !== 'other' && (
+            <button className={styles.agentLockBtn} onClick={() => void forceReleaseLock()}>
+              {language === 'zh' ? '强制解锁' : 'Force release'}
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className={styles.canvas} data-labflow-board>
         {currentExperiment ? (
           <ReactFlow
             nodes={nodes}
@@ -1613,10 +1542,15 @@ export default function ExperimentPage() {
             edgeTypes={edgeTypes}
             deleteKeyCode={null}
             selectionKeyCode={null}
+            nodesDraggable={!frozenByAgent}
+            nodesConnectable={!frozenByAgent}
+            elementsSelectable={!frozenByAgent}
+            onNodeContextMenu={event => { if (frozenByAgent) { event.preventDefault(); event.stopPropagation() } }}
             fitView
             snapToGrid
             snapGrid={[15, 15]}
           >
+            {currentExperiment && <BoardCaptureBridge experimentId={currentExperiment.id} />}
             <Background />
             <Controls />
             <MiniMap />
@@ -1754,7 +1688,7 @@ export default function ExperimentPage() {
                       {tube.substances.map(s => s.name).join(', ')}
                     </div>
                   </div>
-                  <span>{tube.remainingVolume === Infinity ? '∞' : `${tube.remainingVolume} ${tube.remainingVolumeUnit}`}</span>
+                  <span>{singleText(tube.remainingVolume, tube.remainingVolumeUnit || 'μL')}</span>
                 </div>
               ))}
               {sourceTubes.length === 0 && (
@@ -2075,6 +2009,12 @@ export default function ExperimentPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {saveToast && (
+        <div key={saveToast.key} className={styles.toast}>
+          {saveToast.text}
         </div>
       )}
 

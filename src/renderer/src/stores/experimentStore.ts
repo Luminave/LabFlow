@@ -4,8 +4,20 @@
  */
 
 import { create } from 'zustand'
+import {
+  ProjectFileConflictError,
+  isProjectFileAvailable,
+  loadProjectSource,
+  saveProjectSource,
+  type ProjectFileStat
+} from '../utils/projectSource'
 import { Experiment, Tube, TransferConnection, TubePosition, Substance, VolumeUnit } from '@shared/types'
 import { roundVolume } from '@shared/utils/calculations'
+import { computeEndState } from '@/core/endState'
+import { settleExperiment } from '@/core/settle'
+import { useWarehouseStore } from './warehouseStore'
+import { requestWarehouseWrite } from '../utils/warehouseWriteQueue'
+import { blendConcentration, mergeSubstancePlaceholders } from '@/core/mix'
 
 const CURRENT_EXPERIMENT_KEY = 'labflow_current_experiment'
 const TUBE_HISTORIES_KEY = 'labflow_tube_histories'
@@ -13,6 +25,11 @@ const EXPERIMENTS_KEY = 'labflow_experiments' // 实验记录的 localStorage ke
 
 // ==================== 自动保存防抖机制 ====================
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 有没还没落盘的改动（自动保存的防抖窗口里就算有）——热加载判断用 */
+export function hasPendingAutoSave(): boolean {
+  return autoSaveTimer !== null
+}
 const AUTO_SAVE_DELAY = 2000 // 2秒防抖
 
 /**
@@ -22,6 +39,7 @@ const AUTO_SAVE_DELAY = 2000 // 2秒防抖
 function debouncedAutoSave(get: () => ExperimentState) {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(async () => {
+    autoSaveTimer = null
     const state = get()
     if (!state.currentExperiment) return
     
@@ -35,7 +53,7 @@ function debouncedAutoSave(get: () => ExperimentState) {
     
     try {
       if (window.electronAPI) {
-        await window.electronAPI.saveExperiment(experimentToDb(experiment))
+        await persistExperiment(experiment)
         console.log('[AutoSave] Experiment saved to database, id:', experiment.id)
       }
       
@@ -67,78 +85,6 @@ function debouncedAutoSave(get: () => ExperimentState) {
       console.log('[AutoSave] Saved to localStorage as fallback')
     }
   }, AUTO_SAVE_DELAY)
-}
-
-// 计算试管结束状态的辅助函数
-function calculateEndState(tubes: Tube[], connections: TransferConnection[]): Tube[] {
-  // 计算每个试管的移入和移出体积
-  const tubeInVolume = new Map<string, number>()
-  const tubeOutVolume = new Map<string, number>()
-  
-  for (const conn of connections) {
-    if (conn.volume <= 0) continue
-    // 移入
-    tubeInVolume.set(conn.toTubeId, (tubeInVolume.get(conn.toTubeId) || 0) + conn.volume)
-    // 移出
-    tubeOutVolume.set(conn.fromTubeId, (tubeOutVolume.get(conn.fromTubeId) || 0) + conn.volume)
-  }
-  
-  // 计算每个试管移入的物质
-  const tubeInSubstances = new Map<string, Map<string, { moles: number; unit: string }>>()
-  
-  for (const conn of connections) {
-    if (conn.volume <= 0) continue
-    const sourceTube = tubes.find(t => t.id === conn.fromTubeId)
-    if (!sourceTube || sourceTube.type === 'buffer') continue
-    
-    let substanceMap = tubeInSubstances.get(conn.toTubeId)
-    if (!substanceMap) {
-      substanceMap = new Map()
-      tubeInSubstances.set(conn.toTubeId, substanceMap)
-    }
-    
-    for (const sub of sourceTube.substances) {
-      const moles = sub.concentration * conn.volume
-      const existing = substanceMap.get(sub.name)
-      if (existing) {
-        existing.moles += moles
-      } else {
-        substanceMap.set(sub.name, { moles, unit: sub.concentrationUnit })
-      }
-    }
-  }
-  
-  return tubes.map(tube => {
-    const inVolume = tubeInVolume.get(tube.id) || 0
-    const outVolume = tubeOutVolume.get(tube.id) || 0
-    
-    // 计算结束体积
-    let endVolume: number
-    if (tube.type === 'source') {
-      // 原料试管：初始体积 - 移出体积
-      endVolume = roundVolume(Math.max(0, tube.remainingVolume - outVolume))
-    } else if (tube.type === 'buffer') {
-      // 缓冲液：保持无限或不变
-      endVolume = tube.remainingVolume
-    } else {
-      // 中间产物：移入体积 - 移出体积
-      endVolume = roundVolume(Math.max(0, inVolume - outVolume))
-    }
-    
-    // 浓度保持不变（用户设定的值）
-    // 中间试管不重新计算浓度，只更新体积
-    const endSubstances = tube.substances
-    
-    // totalVolume：保留首次创建体积（不随移液变化）
-    const preservedTotalVolume = tube.totalVolume
-    
-    return {
-      ...tube,
-      remainingVolume: endVolume,
-      totalVolume: preservedTotalVolume,
-      substances: endSubstances
-    }
-  })
 }
 
 // 试管历史记录
@@ -178,8 +124,10 @@ interface ExperimentState {
   error: string | null
   
   createNewExperiment: (name: string, description?: string) => void
-  saveCurrentExperiment: (name?: string) => Promise<boolean | void>
+  saveCurrentExperiment: (name?: string, options?: { forceFile?: boolean }) => Promise<boolean | void>
   saveAsExperiment: (newName: string) => void
+  /** 从工程正本文件重新载入（冲突时选「重新载入」/ 顶部提示条点它） */
+  reloadExperimentFromFile: (id: string) => Promise<boolean>
   loadExperiment: (id: string) => boolean
   deleteExperiment: (id: string) => void
   
@@ -200,7 +148,7 @@ interface ExperimentState {
   completeExperiment: () => Promise<void>
   revertExperiment: (experimentId: string) => Promise<boolean>
   
-  toggleShowEndState: () => void
+  toggleShowEndState: () => Promise<void>
   fetchExperiments: () => Promise<void>
   resetExperiment: () => void
   loadSavedExperiment: () => void
@@ -555,6 +503,66 @@ function loadExperimentsFromStorage(): Experiment[] {
   return []
 }
 
+/** 工程 id → 正本文件信息（写文件时用它判断「有没有被别人改过」） */
+const projectFiles = new Map<string, { fileName: string; stat: ProjectFileStat | null }>()
+
+export function getProjectFileInfo(id: string): { fileName: string; stat: ProjectFileStat | null } | undefined {
+  return projectFiles.get(id)
+}
+
+/** 先写正本（yml），再写数据库缓存；正本冲突时抛 ProjectFileConflictError，调用方决定怎么问主人 */
+async function persistExperiment(
+  experiment: Experiment,
+  options: { skipFile?: boolean; forceFile?: boolean } = {}
+): Promise<void> {
+  if (!options.skipFile && isProjectFileAvailable()) {
+    const known = projectFiles.get(experiment.id)
+    // forceFile：主人在「工程文件已被外部修改」对话框里选了「用界面覆盖」
+    const saved = await saveProjectSource(experiment, options.forceFile ? null : known?.stat ?? null)
+    projectFiles.set(experiment.id, { fileName: saved.fileName, stat: saved.stat })
+  }
+  if (window.electronAPI) {
+    // 数据库继续当缓存/回退：正本写成功后再落库，正本失败时这里不会被执行到
+    await window.electronAPI.saveExperiment(experimentToDb(experiment))
+  }
+}
+
+/**
+ * 把所有工程的打开来源换成「工程/*.yml」：
+ * - 文件存在 → 用文件内容（数据库只补快照类字段）
+ * - 文件不存在 → 由数据库记录生成一份
+ */
+/** 这一轮以文件为准读进来的工程 id（用来阻止「数据库版本」把它们覆盖回去） */
+const fileBackedIds = new Set<string>()
+
+async function syncProjectsWithFiles(experiments: Experiment[]): Promise<Experiment[]> {
+  if (!isProjectFileAvailable()) return experiments
+  fileBackedIds.clear()
+  const out: Experiment[] = []
+  for (const experiment of experiments) {
+    try {
+      const source = await loadProjectSource(experiment)
+      if (source) {
+        projectFiles.set(experiment.id, { fileName: source.fileName, stat: source.stat })
+        if (source.warnings.length > 0) {
+          console.warn(`[Store] ${source.fileName} 有问题：`, source.warnings.join('；'))
+        }
+        if (source.fromFile) fileBackedIds.add(experiment.id)
+        out.push(source.experiment)
+        continue
+      }
+    } catch (error) {
+      console.error('[Store] 读工程正本失败，退回数据库：', experiment.name, error)
+    }
+    out.push(experiment)
+  }
+  return out
+}
+
+export function resetProjectFileCache(): void {
+  projectFiles.clear()
+}
+
 export const useExperimentStore = create<ExperimentState>((set, get) => ({
   currentExperiment: null,
   currentTubes: [],
@@ -591,7 +599,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     set(state)
   },
   
-  saveCurrentExperiment: async (name) => {
+  saveCurrentExperiment: async (name, options) => {
     const state = get()
     if (!state.currentExperiment) return
     
@@ -606,9 +614,9 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     
     try {
       if (window.electronAPI) {
-        console.log('[saveCurrentExperiment] Saving to DB, id:', experiment.id, 'name:', experiment.name)
-        await window.electronAPI.saveExperiment(experimentToDb(experiment))
-        console.log('[saveCurrentExperiment] DB save success')
+        console.log('[saveCurrentExperiment] 写正本+缓存, id:', experiment.id, 'name:', experiment.name)
+        await persistExperiment(experiment, { forceFile: options?.forceFile })
+        console.log('[saveCurrentExperiment] 保存成功')
       }
       
       const experiments = get().experiments
@@ -635,6 +643,8 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       console.log('[saveCurrentExperiment] Store updated, experiments count:', newExperiments.length)
       return true
     } catch (e) {
+      // 工程正本被外部改过：不覆盖、不改 store，交给界面弹「重新载入 / 用界面覆盖」
+      if (e instanceof ProjectFileConflictError) throw e
       console.error('[saveCurrentExperiment] Failed to save experiment:', e)
       // 即使 DB 保存失败，也更新 store 和 localStorage
       const experiments = get().experiments
@@ -678,7 +688,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     
     try {
       if (window.electronAPI) {
-        await window.electronAPI.saveExperiment(experimentToDb(newExperiment))
+        await persistExperiment(newExperiment)
       }
       
       const experiments = get().experiments
@@ -699,6 +709,33 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     }
   },
   
+  reloadExperimentFromFile: async (id) => {
+    const experiment = get().experiments.find(e => e.id === id) || get().currentExperiment
+    if (!experiment) return false
+    const source = await loadProjectSource(experiment)
+    if (!source) return false
+    projectFiles.set(id, { fileName: source.fileName, stat: source.stat })
+    const safeTubes = (source.experiment.tubes || []).map(sanitizeTube)
+    const displayTubes = source.experiment.initialStateTubes
+      ? source.experiment.initialStateTubes.map(sanitizeTube)
+      : safeTubes
+    set({
+      currentExperiment: { ...source.experiment, tubes: safeTubes },
+      currentTubes: displayTubes,
+      connections: source.experiment.connections || [],
+      tubePositions: source.experiment.tubePositions || [],
+      experiments: get().experiments.map(e => (e.id === source.experiment.id ? source.experiment : e)),
+      showEndState: false
+    })
+    saveCurrentExperimentToStorage({
+      currentExperiment: { ...source.experiment, tubes: safeTubes },
+      currentTubes: displayTubes,
+      connections: source.experiment.connections || [],
+      tubePositions: source.experiment.tubePositions || []
+    })
+    return true
+  },
+
   loadExperiment: (id) => {
     try {
       const experiment = get().experiments.find(e => e.id === id)
@@ -870,19 +907,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       
       if (sourceTube && targetTube && targetTube.type === 'intermediate' && sourceTube.type !== 'buffer') {
         // 合并源试管的成分到目标试管
-        const existingSubstances = [...targetTube.substances]
-        for (const sub of sourceTube.substances) {
-          const existing = existingSubstances.find(s => s.name === sub.name)
-          if (!existing) {
-            // 添加新成分，浓度暂时为0
-            existingSubstances.push({
-              name: sub.name,
-              concentration: 0,
-              concentrationUnit: sub.concentrationUnit
-            })
-          }
-        }
-        
+        const existingSubstances = mergeSubstancePlaceholders(targetTube.substances, sourceTube.substances)
         newTubes = newTubes.map(t => 
           t.id === targetTube.id 
             ? { ...t, substances: existingSubstances }
@@ -1048,18 +1073,22 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           for (const sub of sourceTube.substances) {
             const existing = newSubstances.find(s => s.name === sub.name)
             if (existing) {
-              const totalMoles = existing.concentration * targetHistory.currentVolume + sub.concentration * conn.volume
-              existing.concentration = Math.round(totalMoles / (targetHistory.currentVolume + conn.volume) * 1000) / 1000
+              existing.concentration = blendConcentration(
+                existing, targetHistory.currentVolume, sub, conn.volume, existing.concentrationUnit
+              )
             } else {
               newSubstances.push({
                 name: sub.name,
-                concentration: Math.round((sub.concentration * conn.volume) / (targetHistory.currentVolume + conn.volume) * 1000) / 1000,
+                concentration: blendConcentration(
+                  { name: sub.name, concentration: 0, concentrationUnit: sub.concentrationUnit },
+                  targetHistory.currentVolume, sub, conn.volume, sub.concentrationUnit
+                ),
                 concentrationUnit: sub.concentrationUnit
               })
             }
           }
         }
-        
+
         // 记录移入操作
         const fromId = sourceTube.type === 'buffer' && sourceTube.id.startsWith('buffer-')
           ? sourceTube.id  // 保留缓冲液的完整ID
@@ -1078,159 +1107,19 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       alert('⚠️ 试管历史记录保存失败：' + (e as Error).message + '\n\n实验数据已保存，但溯源页面可能无法显示试管记录。')
     }
 
-    // 计算结束状态
-    const tubeInVolume = new Map<string, number>()
-    const tubeOutVolume = new Map<string, number>()
-    
-    for (const conn of connections) {
-      if (conn.volume <= 0) continue
-      tubeInVolume.set(conn.toTubeId, (tubeInVolume.get(conn.toTubeId) || 0) + conn.volume)
-      tubeOutVolume.set(conn.fromTubeId, (tubeOutVolume.get(conn.fromTubeId) || 0) + conn.volume)
-    }
-    
-    // 计算每个试管移入的物质
-    const tubeInSubstances = new Map<string, Map<string, { moles: number; unit: string }>>()
-    
-    for (const conn of connections) {
-      if (conn.volume <= 0) continue
-      const sourceTube = currentTubes.find(t => t.id === conn.fromTubeId)
-      if (!sourceTube || sourceTube.type === 'buffer') continue
-      
-      let substanceMap = tubeInSubstances.get(conn.toTubeId)
-      if (!substanceMap) {
-        substanceMap = new Map()
-        tubeInSubstances.set(conn.toTubeId, substanceMap)
-      }
-      
-      for (const sub of sourceTube.substances) {
-        const moles = sub.concentration * conn.volume
-        const existing = substanceMap.get(sub.name)
-        if (existing) {
-          existing.moles += moles
-        } else {
-          substanceMap.set(sub.name, { moles, unit: sub.concentrationUnit })
-        }
-      }
-    }
-    
-    // 获取仓库数据，用于获取原料试管的初始体积
-    const warehouseTubesForInit = await getWarehouseTubes()
-    
-    const endStateTubes = currentTubes.map(tube => {
-      const inVolume = tubeInVolume.get(tube.id) || 0
-      const outVolume = tubeOutVolume.get(tube.id) || 0
-      
-      // 计算结束体积
-      let endVolume: number
-      if (tube.type === 'source') {
-        // 原料试管：使用仓库中的初始体积 - 移出体积
-        const whTube = warehouseTubesForInit.find(t => t.id === tube.id)
-        const initialVolume = whTube ? whTube.remainingVolume : tube.remainingVolume
-        endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
-      } else if (tube.type === 'buffer') {
-        // 缓冲液：保持不变
-        endVolume = tube.remainingVolume
-      } else if (tube.type === 'intermediate') {
-        // 中间产物：判断是从仓库添加的还是新创建的
-        const whTube = warehouseTubesForInit.find(t => t.id === tube.id)
-        const isInWarehouse = !!whTube
-        
-        if (isInWarehouse) {
-          // 从仓库添加的中间产物：当作原料处理
-          const initialVolume = whTube.remainingVolume
-          endVolume = roundVolume(Math.max(0, initialVolume - outVolume))
-        } else {
-          // 新创建的中间产物：移入体积 - 移出体积
-          endVolume = roundVolume(Math.max(0, inVolume - outVolume))
-        }
-      } else {
-        endVolume = tube.remainingVolume
-      }
-      
-      // 浓度保持不变（用户设定的值）
-      const endSubstances = tube.substances
-      
-      // totalVolume：保留首次创建体积
-      // - 原料/缓冲液：保留原 totalVolume
-      // - 新创建的中间产物：totalVolume = 移入体积（首次创建体积）
-      // - 已在仓库的中间产物：保留原 totalVolume
-      let preservedTotalVolume = tube.totalVolume
-      if (tube.type === 'intermediate') {
-        const whTube = warehouseTubesForInit.find(t => t.id === tube.id)
-        if (!whTube) {
-          // 新创建的中间产物：totalVolume = 移入体积
-          preservedTotalVolume = inVolume > 0 ? inVolume : tube.totalVolume
-        }
-      }
-      
-      return {
-        ...tube,
-        remainingVolume: endVolume,
-        totalVolume: preservedTotalVolume,
-        substances: endSubstances,
-        updatedAt: new Date().toISOString()
-      }
-    })
-    
-    // 更新仓库
-    const warehouseTubes = await getWarehouseTubes()
-    console.log('[completeExperiment] Warehouse tubes:', warehouseTubes.length)
-    const tubesToUpdate: Tube[] = []
-    const tubesToAdd: Tube[] = []
-    
-    for (const tube of endStateTubes) {
-      // 跳过上样试管（不保存到仓库）
-      if (tube.type === 'sample') {
-        continue
-      }
-      
-      if (tube.type === 'source') {
-        // 原料试管：更新剩余体积和状态
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        console.log('[completeExperiment] Source tube:', tube.id, tube.name, 'found in warehouse:', !!whTube, 'endVolume:', tube.remainingVolume)
-        if (whTube) {
-          whTube.remainingVolume = tube.remainingVolume
-          whTube.substances = tube.substances
-          whTube.status = tube.remainingVolume <= 0 ? 'depleted' : 'active'
-          whTube.updatedAt = new Date().toISOString()
-          tubesToUpdate.push(whTube)
-        }
-      } else if (tube.type === 'intermediate') {
-        // 中间产物：检查是否已在仓库中
-        const whTube = warehouseTubes.find(t => t.id === tube.id)
-        
-        if (whTube) {
-          // 已在仓库中（之前实验产生的），更新剩余体积
-          console.log('[completeExperiment] Intermediate tube (existing):', tube.id, tube.name, 'endVolume:', tube.remainingVolume)
-          whTube.remainingVolume = tube.remainingVolume
-          whTube.totalVolume = tube.totalVolume
-          whTube.substances = tube.substances
-          whTube.status = tube.remainingVolume <= 0 ? 'depleted' : 'active'
-          whTube.updatedAt = new Date().toISOString()
-          tubesToUpdate.push(whTube)
-        } else {
-          // 不在仓库中（新产生的），添加到仓库
-          console.log('[completeExperiment] Intermediate tube (new):', tube.id, tube.name, 'endVolume:', tube.remainingVolume)
-          const intermediateTube: Tube = {
-            ...tube,
-            status: 'active',
-            updatedAt: new Date().toISOString()
-          }
-          intermediateTube.createdAt = intermediateTube.createdAt || new Date().toISOString()
-          tubesToAdd.push(intermediateTube)
-        }
-      }
-    }
-    
-    console.log('[completeExperiment] Tubes to update:', tubesToUpdate.length)
-    console.log('[completeExperiment] Tubes to add:', tubesToAdd.length)
-    console.log('[completeExperiment] Has electronAPI:', !!window.electronAPI)
-    
-    // 保存到数据库
+    // 结算（core 纯函数：界面与 CLI 共用同一套规则）
+    const warehouseNow = await getWarehouseTubes()
+    const settled = settleExperiment(
+      { experiment: { tubes: currentTubes, connections }, warehouse: warehouseNow },
+      { now: () => new Date().toISOString() }
+    )
+    const endStateTubes = settled.endStateTubes
+
+    console.log('[completeExperiment] 结算：扣减', settled.usage.length, '条，新入仓', settled.created.length, '根，耗尽', settled.depleted.length, '根')
+
     if (window.electronAPI) {
-      // 更新已有试管
-      for (const tube of tubesToUpdate) {
-        console.log('[completeExperiment] Updating tube:', tube.id, tube.remainingVolume)
+      // 仓库里已有的试管：余量 / 状态
+      for (const tube of settled.updated) {
         await window.electronAPI.updateTube({
           id: tube.id,
           name: tube.name,
@@ -1239,15 +1128,14 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           totalVolumeUnit: tube.totalVolumeUnit,
           remainingVolume: tube.remainingVolume,
           remainingVolumeUnit: tube.remainingVolumeUnit,
-          substances: tube.substances, // 主进程会做 JSON.stringify，这里传原始数组
+          substances: tube.substances,
           updatedAt: tube.updatedAt,
           status: tube.status
         })
       }
 
-      // 添加新试管
-      for (const tube of tubesToAdd) {
-        console.log('[completeExperiment] Adding tube:', tube.id, tube.name, tube.remainingVolume)
+      // 新入仓的中间产物：保留画布上的 id
+      for (const tube of settled.createdTubes) {
         await window.electronAPI.addTube({
           id: tube.id,
           name: tube.name,
@@ -1256,42 +1144,28 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           totalVolumeUnit: tube.totalVolumeUnit,
           remainingVolume: tube.remainingVolume,
           remainingVolumeUnit: tube.remainingVolumeUnit,
-          substances: tube.substances, // 主进程会做 JSON.stringify，这里传原始数组
+          substances: tube.substances,
           createdAt: tube.createdAt,
           updatedAt: tube.updatedAt,
           status: tube.status
         })
       }
+
+      // 结算结果回写 仓库.yml（写前有截断护栏）
+      useWarehouseStore.getState().setTubes(settled.warehouseAfter)
+      requestWarehouseWrite()
     } else {
       // 降级到 localStorage
-      console.log('[completeExperiment] Using localStorage fallback')
-      
-      // 更新已有试管
       const existingTubesData = localStorage.getItem('labflow_tubes')
-      let existingTubes: Tube[] = existingTubesData ? JSON.parse(existingTubesData) : []
-      
-      for (const tube of tubesToUpdate) {
-        console.log('[completeExperiment] Updating tube in localStorage:', tube.id, tube.remainingVolume)
-        const index = existingTubes.findIndex(t => t.id === tube.id)
-        if (index >= 0) {
-          // 排除管号等实验专用字段
-          const { tubeNumber: _, ...tubeData } = tube as any
-          existingTubes[index] = tubeData
-        }
+      const existingTubes: Tube[] = existingTubesData ? JSON.parse(existingTubesData) : []
+      const merged = new Map(existingTubes.map(t => [t.id, t]))
+      for (const tube of settled.warehouseAfter) {
+        const { tubeNumber: _ignored, ...tubeData } = tube as any
+        merged.set(tube.id, tubeData as Tube)
       }
-      
-      // 添加新试管
-      for (const tube of tubesToAdd) {
-        console.log('[completeExperiment] Adding tube to localStorage:', tube.id, tube.name, tube.remainingVolume)
-        // 排除管号等实验专用字段
-        const { tubeNumber: _, ...tubeData } = tube as any
-        existingTubes.push(tubeData)
-      }
-      
-      localStorage.setItem('labflow_tubes', JSON.stringify(existingTubes))
-      console.log('[completeExperiment] Saved', existingTubes.length, 'tubes to localStorage')
+      localStorage.setItem('labflow_tubes', JSON.stringify([...merged.values()]))
     }
-    
+
     // 保存实验
     const completedExperiment: Experiment = {
       ...currentExperiment,
@@ -1305,7 +1179,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     }
     
     if (window.electronAPI) {
-      await window.electronAPI.saveExperiment(experimentToDb(completedExperiment))
+      await persistExperiment(completedExperiment)
     }
     
     localStorage.removeItem(CURRENT_EXPERIMENT_KEY)
@@ -1382,7 +1256,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
 
     const revertedExperiment = { ...experiment, status: 'reverted' as const, updatedAt: new Date().toISOString() }
     if (window.electronAPI) {
-      await window.electronAPI.saveExperiment(experimentToDb(revertedExperiment))
+      await persistExperiment(revertedExperiment)
     }
     
     const newExperiments = get().experiments.map(e => e.id === experimentId ? revertedExperiment : e)
@@ -1400,29 +1274,35 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
     return true
   },
   
-  toggleShowEndState: () => {
-    set(state => {
-      const newShowEndState = !state.showEndState
-      
-      if (state.currentExperiment) {
-        if (newShowEndState) {
-          // 显示结束状态
-          if (state.currentExperiment.status === 'completed' && state.currentExperiment.endStateTubes) {
-            // 已完成实验：使用保存的结束状态
-            return { showEndState: true, currentTubes: state.currentExperiment.endStateTubes }
-          } else {
-            // 未完成实验：动态计算结束状态
-            const calculatedEndState = calculateEndState(state.currentTubes, state.connections)
-            return { showEndState: true, currentTubes: calculatedEndState }
-          }
-        } else {
-          // 显示初始状态
-          const displayTubes = state.currentExperiment.initialStateTubes || state.currentExperiment.tubes
-          return { showEndState: false, currentTubes: displayTubes }
+  toggleShowEndState: async () => {
+    const state = get()
+    const newShowEndState = !state.showEndState
+
+    if (state.currentExperiment) {
+      if (newShowEndState) {
+        // 显示结束状态
+        if (state.currentExperiment.status === 'completed' && state.currentExperiment.endStateTubes) {
+          // 已完成实验：使用保存的结束状态
+          set({ showEndState: true, currentTubes: state.currentExperiment.endStateTubes })
+          return
         }
+        // 未完成实验：动态计算结束状态（内核：查仓库口径）
+        const warehouseTubes = await getWarehouseTubes()
+        const calculatedEndState = computeEndState({
+          tubes: state.currentTubes,
+          connections: state.connections,
+          warehouseTubes
+        })
+        set({ showEndState: true, currentTubes: calculatedEndState })
+        return
       }
-      return { showEndState: newShowEndState }
-    })
+      // 显示初始状态
+      const displayTubes = state.currentExperiment.initialStateTubes || state.currentExperiment.tubes
+      set({ showEndState: false, currentTubes: displayTubes })
+      return
+    }
+
+    set({ showEndState: newShowEndState })
   },
   
   fetchExperiments: async () => {
@@ -1433,6 +1313,8 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         const records = await window.electronAPI.getExperiments()
         experiments = records.map(dbToExperiment)
         console.log('[fetchExperiments] Loaded from DB:', experiments.length, 'experiments')
+        // 正本在 工程/*.yml：文件存在就用文件，缺文件就用数据库记录生成一份
+        experiments = await syncProjectsWithFiles(experiments)
       } else {
         experiments = loadExperimentsFromStorage()
         console.log('[fetchExperiments] Loaded from localStorage:', experiments.length, 'experiments')
@@ -1442,21 +1324,36 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       const currentState = get()
       if (currentState.currentExperiment) {
         const currentId = currentState.currentExperiment.id
-        const latestExperiment: Experiment = {
-          ...currentState.currentExperiment,
-          tubes: currentState.currentTubes,
-          tubePositions: currentState.tubePositions,
-          connections: currentState.connections,
-          updatedAt: new Date().toISOString()
-        }
-        const existingIndex = experiments.findIndex(e => e.id === currentId)
-        if (existingIndex >= 0) {
-          // 用当前最新的数据覆盖数据库中的旧数据
-          experiments[existingIndex] = latestExperiment
+
+        // 这一轮是从 工程/*.yml 读进来的 → 文件为准：拿文件版本回填当前工程，而不是反过来
+        const fromFile = fileBackedIds.has(currentId)
+          ? experiments.find(e => e.id === currentId)
+          : undefined
+        if (fromFile) {
+          set({
+            currentExperiment: fromFile,
+            currentTubes: fromFile.tubes,
+            connections: fromFile.connections || [],
+            tubePositions: fromFile.tubePositions || []
+          })
+          console.log('[fetchExperiments] 当前工程以正本文件为准：', fromFile.name)
         } else {
-          experiments.unshift(latestExperiment)
+          const latestExperiment: Experiment = {
+            ...currentState.currentExperiment,
+            tubes: currentState.currentTubes,
+            tubePositions: currentState.tubePositions,
+            connections: currentState.connections,
+            updatedAt: new Date().toISOString()
+          }
+          const existingIndex = experiments.findIndex(e => e.id === currentId)
+          if (existingIndex >= 0) {
+            // 用当前最新的数据覆盖数据库中的旧数据
+            experiments[existingIndex] = latestExperiment
+          } else {
+            experiments.unshift(latestExperiment)
+          }
+          console.log('[fetchExperiments] Merged current experiment, total:', experiments.length)
         }
-        console.log('[fetchExperiments] Merged current experiment, total:', experiments.length)
       }
       
       saveExperimentsToStorage(experiments)

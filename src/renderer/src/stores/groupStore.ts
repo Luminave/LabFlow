@@ -4,6 +4,8 @@
  */
 
 import { create } from 'zustand'
+
+import { requestWarehouseWrite } from '../utils/warehouseWriteQueue'
 import { TubeGroup } from '@shared/types'
 
 interface GroupState {
@@ -14,6 +16,8 @@ interface GroupState {
   addGroup: (name: string, color?: string, notes?: string) => Promise<TubeGroup>
   updateGroup: (id: string, updates: Partial<TubeGroup>) => Promise<void>
   deleteGroup: (id: string) => Promise<void>
+  /** 直接换整份分组（正本文件读回来时用） */
+  setGroups: (groups: TubeGroup[]) => void
   getGroup: (id: string) => TubeGroup | undefined
   generateGroupName: () => string
 }
@@ -41,6 +45,7 @@ function getRandomGroupColor(): string {
 
 export const useGroupStore = create<GroupState>((set, get) => ({
   groups: [],
+  setGroups: (groups) => set({ groups }),
   loading: false,
 
   loadGroups: async () => {
@@ -92,6 +97,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
 
     set({ groups: [...get().groups, newGroup] })
+    requestWarehouseWrite()
     return newGroup
   },
 
@@ -114,6 +120,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
 
     set({ groups: newGroups })
+    requestWarehouseWrite()
   },
 
   deleteGroup: async (id) => {
@@ -130,6 +137,7 @@ export const useGroupStore = create<GroupState>((set, get) => ({
     }
 
     set({ groups: newGroups })
+    requestWarehouseWrite()
   },
 
   getGroup: (id) => {

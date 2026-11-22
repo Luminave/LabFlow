@@ -1,0 +1,116 @@
+/**
+ * 热加载（第 5 步）：外面的 Agent 改了 `仓库.yml` / `工程/*.yml`，界面不用重启就跟上。
+ *
+ * 决策部分是纯函数（`planHotReload`），可以单测；
+ * 订阅与重载在 `useStoreHotReload` 里，只做「按计划执行」。
+ *
+ * 防自激在**主进程**：自己写文件前记内容哈希，watcher 看到同一哈希就不广播。
+ * 所以这里拿到的每个事件都是「真外部修改」，不需要再判一遍。
+ */
+
+import { useEffect } from 'react'
+
+import { useExperimentStore, getProjectFileInfo, hasPendingAutoSave } from '../stores/experimentStore'
+import { useWarehouseStore } from '../stores/warehouseStore'
+import { useGroupStore } from '../stores/groupStore'
+import { useSubstanceColorStore } from '../stores/substanceColorStore'
+import { loadWarehouseFile } from './warehouseSource'
+import { showGlobalToast } from '../components/GlobalToast'
+
+export interface StoreFilesChangedPayload {
+  warehouse: boolean
+  projects: string[]
+}
+
+export interface HotReloadPlan {
+  /** 仓库正本变了 → 重读并静默替换内存 */
+  reloadWarehouse: boolean
+  /** 当前打开的工程文件变了且没有未保存改动 → 直接重载 */
+  reloadProject: boolean
+  /** 当前工程文件变了但有未保存改动 → 只挂提示条，不覆盖 */
+  promptProject: boolean
+  /** 列表（首页「最近工程」）里的名字/时间要刷新 */
+  refreshProjectList: boolean
+}
+
+export interface PlanInput {
+  payload: StoreFilesChangedPayload
+  /** 当前打开工程的正本文件名（`AD-5.2.yml`），没打开工程就 null */
+  currentProjectFile: string | null
+  /** 有未落盘的改动 */
+  dirty: boolean
+}
+
+/** 纯决策：拿到一次文件变更，界面该做什么 */
+export function planHotReload(input: PlanInput): HotReloadPlan {
+  const changedProjects = input.payload.projects || []
+  const touchesCurrent = Boolean(input.currentProjectFile) && changedProjects.includes(input.currentProjectFile!)
+
+  return {
+    reloadWarehouse: Boolean(input.payload.warehouse),
+    reloadProject: touchesCurrent && !input.dirty,
+    promptProject: touchesCurrent && input.dirty,
+    // 没有正在编辑的工程时，列表里的名字/时间也要跟着变
+    refreshProjectList: changedProjects.length > 0
+  }
+}
+
+/** 重读 仓库.yml 并静默替换内存（绝不写回文件，写回会和自己打架） */
+export async function reloadWarehouseFromFile(): Promise<boolean> {
+  const loaded = await loadWarehouseFile()
+  if (!loaded) return false
+
+  const { snapshot } = loaded
+  useWarehouseStore.getState().setTubes(snapshot.reagents)
+  useGroupStore.getState().setGroups(snapshot.groups)
+  // 成分颜色存在 仓库.yml 里，文件里有就跟着换（store 没有批量 setter，逐条写内存即可）
+  if (snapshot.substanceColors && snapshot.substanceColors.length > 0) {
+    for (const item of snapshot.substanceColors) {
+      void useSubstanceColorStore.getState().setColor(item.name, item.color, item.bgColor)
+    }
+  }
+  return true
+}
+
+/**
+ * 挂一次就够（App 顶层）。锁生效时也照样重载——Agent 正在改，界面就该跟着变。
+ */
+export function useStoreHotReload(): void {
+  useEffect(() => {
+    const subscribe = window.electronAPI?.onStoreFilesChanged
+    if (!subscribe) return
+
+    const unsubscribe = subscribe((payload: StoreFilesChangedPayload) => {
+      const state = useExperimentStore.getState()
+      const current = state.currentExperiment
+      const fileInfo = current ? getProjectFileInfo(current.id) : null
+
+      const plan = planHotReload({
+        payload,
+        currentProjectFile: fileInfo?.fileName ?? null,
+        dirty: hasPendingAutoSave()
+      })
+
+      if (plan.reloadWarehouse) {
+        void reloadWarehouseFromFile().then(ok => {
+          if (ok) showGlobalToast('仓库文件已更新，已重新载入')
+        })
+      }
+
+      if (plan.promptProject) {
+        // 交给实验页挂提示条（不覆盖主人的改动）
+        window.dispatchEvent(new CustomEvent('labflow:projectFileChanged', { detail: { prompt: true } }))
+      } else if (plan.reloadProject && current) {
+        void state.reloadExperimentFromFile(current.id).then(ok => {
+          if (ok) showGlobalToast('工程文件已更新，已重新载入')
+        })
+      }
+
+      if (plan.refreshProjectList && !current) {
+        void state.fetchExperiments()
+      }
+    })
+
+    return unsubscribe
+  }, [])
+}

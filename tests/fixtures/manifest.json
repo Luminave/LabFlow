@@ -1,0 +1,30 @@
+[
+  {
+    "name": "ad-5-2",
+    "file": "ad-5-2.json",
+    "tubes": 14,
+    "connections": 12,
+    "units": [
+      "μM",
+      "mM"
+    ]
+  },
+  {
+    "name": "261118",
+    "file": "261118.json",
+    "tubes": 26,
+    "connections": 26,
+    "units": [
+      "μM"
+    ]
+  },
+  {
+    "name": "261118-实际实验",
+    "file": "261118-实际实验.json",
+    "tubes": 31,
+    "connections": 28,
+    "units": [
+      "μM"
+    ]
+  }
+]

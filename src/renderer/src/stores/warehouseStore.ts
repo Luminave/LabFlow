@@ -4,6 +4,8 @@
  */
 
 import { create } from 'zustand'
+
+import { requestWarehouseWrite } from '../utils/warehouseWriteQueue'
 import { Tube, TubeStatus } from '@shared/types'
 
 interface WarehouseState {
@@ -122,6 +124,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     try {
       if (window.electronAPI) {
         await window.electronAPI.addTube(tubeToDb(newTube))
+        requestWarehouseWrite()
       } else {
         const tubes = [...get().tubes, newTube]
         localStorage.setItem('labflow_tubes', JSON.stringify(tubes))
@@ -196,6 +199,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
       if (updatedTube) {
         if (window.electronAPI) {
           await window.electronAPI.updateTube(tubeToDb(updatedTube))
+          requestWarehouseWrite()
         } else {
           localStorage.setItem('labflow_tubes', JSON.stringify(newTubes))
         }
@@ -214,6 +218,7 @@ export const useWarehouseStore = create<WarehouseState>((set, get) => ({
     try {
       if (window.electronAPI) {
         await window.electronAPI.deleteTube(id)
+        requestWarehouseWrite()
       } else {
         localStorage.setItem('labflow_tubes', JSON.stringify(newTubes))
       }
