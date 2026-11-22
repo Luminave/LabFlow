@@ -106,6 +106,8 @@ export interface ProjectSourceEntry {
   warnings: string[]
   /** 这份数据是从文件读出来的（false = 由数据库生成） */
   fromFile: boolean
+  /** 文件里自己写了 project.id（false = 借的数据库 id / 新生成的 id） */
+  idFromFile: boolean
 }
 
 /** 保存时撞上外部修改 */
@@ -179,7 +181,8 @@ export async function loadProjectSource(fallback: Experiment): Promise<ProjectSo
       fileName: fileNameOf(found.path),
       stat: found.stat,
       warnings: [...loaded.warnings, ...refWarnings],
-      fromFile: true
+      fromFile: true,
+      idFromFile: loaded.idFromFile
     }
   }
 
@@ -196,7 +199,8 @@ export async function loadProjectSource(fallback: Experiment): Promise<ProjectSo
     fileName: written.fileName,
     stat: written.stat,
     warnings: checkReagentRefs(fallback, await warehouseIds()),
-    fromFile: false
+    fromFile: false,
+    idFromFile: false
   }
 }
 
@@ -246,7 +250,8 @@ export async function reloadProjectSource(fallback: Experiment): Promise<Project
     fileName: fileNameOf(found.path),
     stat: found.stat,
     warnings: loaded.warnings,
-    fromFile: true
+    fromFile: true,
+    idFromFile: loaded.idFromFile
   }
 }
 

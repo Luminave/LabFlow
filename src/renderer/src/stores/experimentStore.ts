@@ -11,6 +11,7 @@ import {
   saveProjectSource,
   type ProjectFileStat
 } from '../utils/projectSource'
+import { experimentFromProjectFile } from '@/core/store/projectFile'
 import { Experiment, Tube, TransferConnection, TubePosition, Substance, VolumeUnit } from '@shared/types'
 import { roundVolume } from '@shared/utils/calculations'
 import { computeEndState } from '@/core/endState'
@@ -626,6 +627,69 @@ async function persistExperiment(
 /** 这一轮以文件为准读进来的工程 id（用来阻止「数据库版本」把它们覆盖回去） */
 const fileBackedIds = new Set<string>()
 
+/**
+ * 把「`工程/*.yml` 里有、数据库里没有」的工程导入数据库。
+ *
+ * 判定规则：
+ * - 文件里写了 `project.id`：数据库已有同 id → 跳过（内容仍由 loadProjectSource 提供）；
+ *   数据库没有同 id、但有同名工程 → 视为同一个工程，不新增行，并警告 id 不一致；
+ * - 文件里没写 `project.id`：工程名取文件名（不带 .yml），id 由解析器生成并落库，
+ *   重复导入时靠「同名」判定为已存在。
+ * - 目录里删掉/移走文件**不会**删数据库记录（只在日志里说明）。
+ */
+async function importProjectsFromDirectory(experiments: Experiment[]): Promise<Experiment[]> {
+  if (!isProjectFileAvailable()) return experiments
+  const dataRoot = window.electronAPI?.dataRoot
+  if (!dataRoot || typeof dataRoot.listProjects !== 'function') return experiments
+
+  let files: { name: string; fileName: string }[]
+  try {
+    files = await dataRoot.listProjects()
+  } catch (error) {
+    console.error('[Store] 列出工程文件失败，跳过导入：', error)
+    return experiments
+  }
+  if (!files || files.length === 0) return experiments
+
+  const out = [...experiments]
+  for (const file of files) {
+    try {
+      const read = await dataRoot.readProject(file.fileName)
+      if (!read.ok || !read.content) continue
+
+      const parsed = experimentFromProjectFile(read.content, null)
+      const fileId = parsed.idFromFile ? parsed.experiment.id : ''
+      const baseName = file.fileName.replace(/\.yml$/i, '') || file.name
+      const nameFromFile = !parsed.warnings.some(w => w.includes('没有 project.name'))
+      // 文件没写 id → 用文件名当工程名（文件名的身份比内容里的 name 更稳定）
+      const name = parsed.idFromFile && nameFromFile ? parsed.experiment.name : baseName
+
+      if (fileId && out.some(e => e.id === fileId)) continue
+
+      const sameName = out.find(e => e.name === name)
+      if (sameName) {
+        if (fileId && sameName.id !== fileId) {
+          console.warn(
+            `[Store] 工程「${name}」文件里的 id（${fileId}）和数据库（${sameName.id}）不一致：按同一个工程处理，采用数据库 id，不写入文件 id`
+          )
+        }
+        continue
+      }
+
+      const experiment: Experiment = { ...parsed.experiment, name }
+      if (!experiment.id) continue
+      if (window.electronAPI) {
+        await window.electronAPI.saveExperiment(experimentToDb(experiment))
+      }
+      out.push(experiment)
+      console.log(`[Store] 从 工程/${file.fileName} 导入工程「${experiment.name}」（id=${experiment.id}）`)
+    } catch (error) {
+      console.warn('[Store] 导入工程文件失败，跳过：', file.fileName, error)
+    }
+  }
+  return out
+}
+
 async function syncProjectsWithFiles(experiments: Experiment[]): Promise<Experiment[]> {
   if (!isProjectFileAvailable()) return experiments
   fileBackedIds.clear()
@@ -634,12 +698,26 @@ async function syncProjectsWithFiles(experiments: Experiment[]): Promise<Experim
     try {
       const source = await loadProjectSource(experiment)
       if (source) {
+        let loaded = source.experiment
+        // 同名但 id 不一致（文件被手工改过 id）：按同一个工程处理，以数据库 id 为准
+        if (loaded.id !== experiment.id && loaded.name === experiment.name) {
+          console.warn(
+            `[Store] 工程「${loaded.name}」文件 id（${loaded.id}）与数据库（${experiment.id}）不一致，采用数据库 id`
+          )
+          loaded = { ...loaded, id: experiment.id }
+        }
+        // 文件没写 id（老文件/手工文件）或没写 name：身份以数据库里那条为准
+        const noNameInFile = source.warnings.some(w => w.includes('没有 project.name'))
+        if (source.fromFile && (!source.idFromFile || noNameInFile) && loaded.name !== experiment.name) {
+          loaded = { ...loaded, name: experiment.name }
+        }
         projectFiles.set(experiment.id, { fileName: source.fileName, stat: source.stat })
         if (source.warnings.length > 0) {
           console.warn(`[Store] ${source.fileName} 有问题：`, source.warnings.join('；'))
         }
         if (source.fromFile) fileBackedIds.add(experiment.id)
-        out.push(source.experiment)
+        else console.log(`[Store] 工程「${experiment.name}」在 工程/ 里没有文件（可能被删除或移动），保留数据库记录不删除，并按数据库内容生成了一份`)
+        out.push(loaded)
         continue
       }
     } catch (error) {
@@ -1713,6 +1791,8 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         const records = await window.electronAPI.getExperiments()
         experiments = records.map(dbToExperiment)
         console.log('[fetchExperiments] Loaded from DB:', experiments.length, 'experiments')
+        // 先导入「工程/*.yml 有、数据库没有」的工程，再统一以文件为准同步内容
+        experiments = await importProjectsFromDirectory(experiments)
         // 正本在 工程/*.yml：文件存在就用文件，缺文件就用数据库记录生成一份
         experiments = await syncProjectsWithFiles(experiments)
       } else {

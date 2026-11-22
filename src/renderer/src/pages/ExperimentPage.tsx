@@ -1184,13 +1184,15 @@ export default function ExperimentPage() {
       return
     }
 
-    // 派生件（SOP + 截图）写到数据正本的 导出/ 目录；白板与数据文件默认不导
-    let exportDir = settings.directory
-    try {
-      const info = await window.electronAPI?.dataRoot?.getInfo?.()
-      if (info?.ok && info.exportDir) exportDir = info.exportDir
-    } catch {
-      /* 拿不到目录信息就退回设置里的目录 */
+    // 派生件（SOP + 截图）优先写到设置里指定的目录；只有主人没设目录时才退回数据正本的 导出/
+    let exportDir = (settings.directory || '').trim()
+    if (!exportDir) {
+      try {
+        const info = await window.electronAPI?.dataRoot?.getInfo?.()
+        if (info?.ok && info.exportDir) exportDir = info.exportDir
+      } catch {
+        /* 拿不到目录信息也没有设置目录：交给 runProjectExport 判 no-directory */
+      }
     }
 
     const outcome = await runProjectExport({

@@ -71,7 +71,11 @@ export async function captureBoardPng(experimentId: string): Promise<string | nu
   document.body.classList.add('labflow-capturing')
   try {
     await current.fitView()
-    // 等两帧：fitView 的缩放/位移要落到 DOM 上之后截图才不会糊
+    // 等两帧让缩放落到 DOM；再等一小段（React Flow 的 transform 与节点测量都是异步的），
+    // 然后补一次 fitView，避免第一次算出来的缩放偏大、图被裁掉边
+    await nextFrame()
+    await new Promise(resolve => setTimeout(resolve, 180))
+    await current.fitView()
     await nextFrame()
     const rect = boardRectFromDom()
     if (!rect) return null
