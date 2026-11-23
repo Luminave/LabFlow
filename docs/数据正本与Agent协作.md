@@ -164,3 +164,26 @@ labflow://open?project=<工程名>[&id=<工程 id>]
 6. `工程\_deleted\` 目前不自动清理，需要时手动删。
 7. CLI 里少量代码反向引用了渲染层的工具函数（能用，但分层不干净）。
 8. 退出码语义：`1` 同时用于「校验有问题」和「写盘冲突」，脚本要区分得看 `--json` 里的字段。
+9. `validate --json` 里 `concentration_mismatch` 的 `message` 是空串（`params` 正常）。核对结果与最初判断不同：文案层 `src/renderer/src/pages/experimentCheckMessages.ts:97` 已有这个码的 zh/en 文案，CLI 也直接复用了同一个 `formatCheckIssues`（`src/cli/commands.ts:26` 引入、`:170` 调用），**缺的不是文案而是构建**——`dist-cli/labflow.mjs` 是旧产物，其 `formatCheckIssues` 的 `switch` 里没有 `concentration_mismatch` 分支，于是走 `default` 得到空串。重跑 `npm run build:cli` 即可（AI 未实测重建，待确认）。
+10. 应用自己重存工程会把单位写成 `µ`(U+00B5)、并去掉 `name:` 上原本的引号，与规范 `μ`(U+03BC) 不一致；Agent 覆盖回写时要顺手改回。
+
+## 十一、Agent 改完工程文件之后必须做的事（操作规程）
+
+> 这条链上没有「自动同步」：LabFlow **不监听文件**（全仓无 `fs.watch` / `watchFile` / `chokidar`），
+> 工程只在「打开工程」时读一次盘。Agent 写完盘，界面里还是旧内容——必须有人去点重载。
+
+1. **写完盘，一定要在回复里提醒用户重载。** 明确说：「在界面顶栏点『重新载入』（或点『打开工程』重新选这个工程），才能看到新内容」。不能假设界面会自动刷新。
+   - 界面做得也很保守：窗口重新获得焦点时（`ExperimentPage.tsx:1519-1527`，比对逻辑在 `:170-190`）只比对 mtime + size，变了就在顶栏挂一条「工程文件已被外部修改：<文件名>」，附「重新载入」「先不管」——**故意不自动套用**，怕冲掉界面里未保存的改动。
+2. **不要替用户点「保存」。** 「保存」写的是界面内存里的内容；内存可能还是旧的，一点就把旧内容写回磁盘、盖掉 Agent 刚写的文件。要落界面改动，等用户确认后再点。
+3. **弹「重新载入 / 覆盖」时选「重新载入」。** 保存前会比对 stat（`ExperimentPage.tsx:1146-1160`、`src/core/store/fileStat.ts`），文件被外部改过就弹框：选「重新载入」= 保留磁盘版本（也就是 Agent 写的版本）；选「覆盖」= 丢掉磁盘改动、把界面旧内容写回去。
+4. **单位写希腊字母 `μ`（U+03BC）**，不是微符号 `µ`（U+00B5）。应用自己重存会写成后者，属待修缺陷；Agent 回写文件前后都检查一遍，别把错的单位当「规范」抄下去。
+5. **标准动作顺序**：
+   1. 写/改 `D:\学习\labflow\工程\<名>.yml`
+   2. `node dist-cli/labflow.mjs validate <名>` —— 退出码必须是 `0`
+   3. `node dist-cli/labflow.mjs calc <名>` —— 核对关键浓度与用量
+   4. 回复里提醒用户重载
+   5. 用户重载后，一起看效果
+6. **三个已知未修缺陷**——**不影响 `validate`/`calc` 与界面读写**，知道就行，别当新 bug 报；排期在第十节：
+   - **导出的流程图 PNG 会裁边**：`captureBoardPng`（`src/renderer/src/utils/boardCapture.ts`）在画布很密时（例如 55 支管）只截到可视区；根因是 `fitView` 没显式给 `minZoom`，React Flow 默认下限 0.5 把缩放夹住了。
+   - **`validate --json` 的 `concentration_mismatch` 没有 `message`**：见第十节第 9 条（旧构建产物，重建即可）。
+   - **应用重存把 `μ` 写成 `µ`、并去掉 `name:` 的引号**：见第十节第 10 条。
