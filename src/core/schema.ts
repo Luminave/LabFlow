@@ -64,6 +64,8 @@ export type ValidationCode =
   | 'config_order_gap'
   /** 源试管引用的仓库试剂在 仓库.yml 里找不到（结算会因此被拒绝） */
   | 'warehouse_ref_missing'
+  /** 标称浓度与连线算出的可达浓度差 > 5%（配不出来的目标浓度，检查必须拦） */
+  | 'concentration_mismatch'
 
 /** 结构化校验错误：{ code, tubeId, params }，不含任何自然语言文案 */
 export interface ValidationIssue {

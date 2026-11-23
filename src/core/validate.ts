@@ -12,6 +12,9 @@
  * 4. 中间产物目标体积与连线输入体积不匹配（差 > 0.1 μL）
  * 5. 定义了成分但浓度为 0
  * 6. 讲述者用的配置序号：未设置 / 非正整数 / 重复 / 跳号
+ * 7. 标称浓度配不出来：中间产物 `substances` 里写的浓度，与连线体积算出来的可达浓度
+ *    相差超过 5% —— 报 `concentration_mismatch`（主人 2026-11-23：Agent 与手工都可能
+ *    把目标浓度写错，检查按钮必须当场拦住，不能让它安静显示在页面上）
  */
 
 import type { Tube, ValidationInput, ValidationIssue } from './schema'
@@ -183,6 +186,9 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
     }
   }
 
+  // 7. 标称浓度 vs 连线算出来的可达浓度（差 > 5% 报错）
+  issues.push(...checkConcentrationReachable(tubes, connections))
+
   const orderCounts = new Map<number, string[]>()
   for (const tube of intermediateTubes) {
     if (tube.configOrder) {
@@ -211,6 +217,98 @@ export function validateExperiment(input: ValidationInput): ValidationIssue[] {
           params: { from: orders[i - 1], to: orders[i] }
         })
       }
+    }
+  }
+
+  return issues
+}
+
+/** 相对偏差容忍度：5%（与界面提示口径一致） */
+const CONCENTRATION_TOLERANCE = 0.05
+
+/**
+ * 逐管算「按现有连线，这个成分实际能达到的浓度」，与 `substances` 里写的标称值比。
+ * - 源试管：自身标称即真值（来自仓库，无需再验）
+ * - 缓冲液：不贡献成分
+ * - 中间产物：Σ(上游有效浓度 × 体积) / 本管体积；上游若也是中间产物就递归（带缓存、防环）
+ * 命中时 params 给 declared / attainable，UI 直接显示「标称 1 μM，只能配出 0.5 μM」。
+ */
+function checkConcentrationReachable(tubes: Tube[], connections: ValidationInput['connections']): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const tubeById = new Map(tubes.map(t => [t.id, t]))
+  const incoming = new Map<string, ValidationInput['connections']>()
+  for (const conn of connections) {
+    const list = incoming.get(conn.toTubeId) || []
+    list.push(conn)
+    incoming.set(conn.toTubeId, list)
+  }
+
+  const cache = new Map<string, Map<string, number>>()
+  const visiting = new Set<string>()
+
+  /** 该管每个成分的有效浓度（µM） */
+  const concentrationsOf = (tubeId: string): Map<string, number> => {
+    const cached = cache.get(tubeId)
+    if (cached) return cached
+    const tube = tubeById.get(tubeId)
+    const result = new Map<string, number>()
+    if (!tube) return result
+
+    if (tube.type === 'source' || (tube.type as string) === 'warehouse') {
+      for (const sub of tube.substances) {
+        if (sub.name && sub.concentration > 0) result.set(sub.name, sub.concentration)
+      }
+      cache.set(tubeId, result)
+      return result
+    }
+    if (tube.type === 'buffer') {
+      cache.set(tubeId, result)
+      return result
+    }
+    if (visiting.has(tubeId)) return result // 环：不递归，交给「配不出来」去暴露
+
+    const totalVolume = baseVolume(tube.totalVolume, tube.totalVolumeUnit)
+    if (totalVolume <= 0) {
+      cache.set(tubeId, result)
+      return result
+    }
+
+    visiting.add(tubeId)
+    const moles = new Map<string, number>()
+    for (const conn of incoming.get(tubeId) || []) {
+      const volume = baseVolume(conn.volume, (conn as { volumeUnit?: string }).volumeUnit)
+      if (volume <= 0) continue
+      for (const [name, conc] of concentrationsOf(conn.fromTubeId)) {
+        moles.set(name, (moles.get(name) || 0) + conc * volume)
+      }
+    }
+    visiting.delete(tubeId)
+
+    for (const [name, pmol] of moles) result.set(name, pmol / totalVolume)
+    cache.set(tubeId, result)
+    return result
+  }
+
+  for (const tube of tubes) {
+    if (tube.type !== 'intermediate' || tube.substances.length === 0) continue
+    if (tube.asSource) continue
+    const attainable = concentrationsOf(tube.id)
+    for (const sub of tube.substances) {
+      if (!sub.name || sub.concentration <= 0) continue
+      const actual = attainable.get(sub.name) || 0
+      const declared = sub.concentration
+      if (declared <= 0) continue
+      const deviation = Math.abs(actual - declared) / declared
+      if (deviation <= CONCENTRATION_TOLERANCE) continue
+      issues.push({
+        code: 'concentration_mismatch',
+        tubeId: tube.id,
+        params: {
+          substanceName: sub.name,
+          declared,
+          attainable: Math.round(actual * 1000) / 1000
+        }
+      })
     }
   }
 

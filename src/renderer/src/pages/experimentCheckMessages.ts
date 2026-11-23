@@ -28,7 +28,8 @@ const TYPE_BY_CODE: Record<ValidationIssue['code'], string> = {
   config_order_invalid: 'config_order_invalid',
   config_order_duplicate: 'config_order_duplicate',
   config_order_gap: 'config_order_gap',
-  warehouse_ref_missing: 'warehouse_ref_missing'
+  warehouse_ref_missing: 'warehouse_ref_missing',
+  concentration_mismatch: 'concentration_mismatch'
 }
 
 function num(value: string | number | string[] | undefined): number {
@@ -93,6 +94,14 @@ export function formatCheckIssues(
       case 'config_order_gap':
         message = `${zh ? '配置序号有跳过：从' : 'Config order gap: from'} ${str(params.from)} ${zh ? '跳到' : 'to'} ${str(params.to)}`
         break
+      case 'concentration_mismatch': {
+        const declared = num(params.declared)
+        const attainable = num(params.attainable)
+        message = zh
+          ? `成分"${str(params.substanceName)}"标称 ${declared} μM，按现有连线体积只能配出 ${attainable} μM —— 这个浓度配不出来`
+          : `Substance "${str(params.substanceName)}" is declared ${declared} μM but the current connections can only reach ${attainable} μM`
+        break
+      }
       case 'warehouse_ref_missing':
         message = zh
           ? `这根试管引用的仓库试剂在仓库里找不到（id:${str(params.reagentId)}），结算会被拒绝；请先在仓库里补上或删掉这根管`
