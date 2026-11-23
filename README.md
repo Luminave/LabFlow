@@ -230,10 +230,34 @@ LabFlow/
 
 LabFlow 的真相是纯文本（`仓库.yml` + `工程/<名>.yml`），Agent 可以直接读写工程文件；配套 skill 把「写哪个文件、怎么校验、什么时候提醒你重载」固定下来，不用每次重新讲一遍。
 
-**装 skill**
+### 装好 LabFlow 之后，怎么让 Agent 用上 skill
 
-1. 把仓库里的 `skills/labflow-project/SKILL.md` 复制到 `C:\Users\27133\.dsh\skills\labflow-project\`（目录名必须是 `labflow-project`，文件名必须是 `SKILL.md`）；
-2. 重启 DSH —— 启动时扫描该目录，skill 列表里出现 `labflow-project` 就装好了。
+安装包只打包了运行程序，**没有打包 `skills/`**——所以刚装好的机器上没有 `SKILL.md`，得自己去拿一份。
+
+**1. 先拿到 SKILL.md**（两条路，二选一）
+
+- 从仓库下载：[`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md)（浏览器打开后全选复制，或右键另存为）；
+- 已经在本地 clone 过仓库的，直接用仓库里的 `skills/labflow-project/SKILL.md`。
+
+文件名必须叫 `SKILL.md`，所在文件夹必须叫 `labflow-project`——这两个名字是 Agent 认出这个 skill 的依据，改名就读不到。
+
+**2. 放到你的 Agent 的 skill 目录**
+
+| Agent | 放到哪 | 说明 |
+|---|---|---|
+| DSH | `~/.dsh/skills/labflow-project/SKILL.md`（Windows 是 `C:\Users\<你的用户名>\.dsh\skills\labflow-project\SKILL.md`） | 放好后重启 DSH，启动时扫描该目录 |
+| Claude Code | `~/.claude/skills/labflow-project/SKILL.md` | 同上，重启会话生效 |
+| 其他（Cursor / Copilot 等没有 skill 目录的） | 把 SKILL.md 全文贴进项目的 `AGENTS.md` 或规则文件 | 效果相当于常驻系统提示 |
+
+**3. 怎么验证装上了**
+
+- 新开一个会话，问它「你现在有哪些 skill」或直接说「把这个实验排进 LabFlow」；
+- 如果它按规程走（先写 `工程/<名>.yml` → 跑校验 → 提醒你点「重新载入」），就是装上了；
+- 如果它张口就让你在界面里手点，说明没读到 skill。
+
+**4. 一句可直接复制的话术**
+
+> 用 labflow-project skill 帮我把这个实验排进 LabFlow，工程名 261124，先把配液流程写进 `工程/261124.yml`，跑 validate 到退出码 0，再告诉我要不要重新载入。
 
 **给 Agent 的三条硬约束**
 
@@ -252,6 +276,8 @@ node dist-cli/labflow.mjs export 261123 --out "D:\学习\labflow\导出\261123"
 ```
 
 > 没构建过就先 `npm run build:cli`。这三个命令默认**只算不写**，不动任何工程文件。
+
+> **诚实说明**：上面这三条 CLI 命令需要源码仓库（`npm run build:cli` 生成 `dist-cli/labflow.mjs`）。**安装版和便携版目前不带 CLI**，装完只能靠 Agent 直接读写 `.yml` 加应用里的「检查」按钮；如果你只装了安装版，把这三条命令当成"给 Agent 看它该做什么"的参考即可。
 
 **重载的两种情形**：顶栏挂出「工程文件已被外部修改」时点「重新载入」；保存时弹出「重新载入 / 覆盖」，选**重新载入**（= 保留 Agent 写的磁盘版本），选「覆盖」就把界面旧内容写回去了。
 

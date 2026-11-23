@@ -210,6 +210,63 @@ LabFlow/
 
 ---
 
+## 🤖 Using LabFlow with an Agent
+
+LabFlow's source of truth is plain text (`仓库.yml` + `工程/<name>.yml`), so an agent can read and write project files directly. The companion skill fixes down *which file to write, how to validate, when to remind you to reload*, so you don't have to explain it every session.
+
+### After installing LabFlow: how to get your agent to use the skill
+
+The installer only ships the app — **it does not bundle `skills/`**. A freshly installed machine has no `SKILL.md`, so grab a copy first.
+
+**1. Get `SKILL.md`** (pick one)
+
+- Download from the repo: [`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md) (open it and copy the whole text, or save the page);
+- If you already cloned the repo, use `skills/labflow-project/SKILL.md` from your clone.
+
+The file must be named `SKILL.md` and its folder must be named `labflow-project` — those two names are how the agent finds the skill; rename them and it will not be loaded.
+
+**2. Put it in your agent's skill directory**
+
+| Agent | Where to put it | Notes |
+|---|---|---|
+| DSH | `~/.dsh/skills/labflow-project/SKILL.md` (on Windows: `C:\Users\<your-user>\.dsh\skills\labflow-project\SKILL.md`) | Restart DSH afterwards — it scans this directory at startup |
+| Claude Code | `~/.claude/skills/labflow-project/SKILL.md` | Same as above; restart the session for it to take effect |
+| Others (Cursor / Copilot etc., which have no skill directory) | Paste the whole `SKILL.md` into the project's `AGENTS.md` or rules file | Works like a permanent system prompt |
+
+**3. Check that it loaded**
+
+- Start a new session and ask "which skills do you have?", or simply say "put this experiment into LabFlow";
+- If it follows the procedure (write `工程/<name>.yml` → run validate → remind you to click "Reload"), it loaded;
+- If it immediately tells you to click things in the UI by hand, it did not read the skill.
+
+**4. One sentence you can copy**
+
+> Use the labflow-project skill to put this experiment into LabFlow. Project name 261124: write the solution-prep flow into `工程/261124.yml` first, run validate until it exits 0, then tell me whether I need to reload.
+
+**Three hard rules for the agent**
+
+| # | Rule | Why |
+|---|---|---|
+| 1 | Write the file → `validate` must exit 0 → tell the user to click "Reload" in the top bar | LabFlow does not watch files; it reads from disk only when a project is opened, so the UI keeps showing stale content until you reload |
+| 2 | Never click "Save" in the UI on the user's behalf | Save writes the in-memory state, which may be stale and would overwrite what the agent just wrote |
+| 3 | Never invent a "plausible" concentration to get past validation | Validation is the last gate; bypassing it produces a wrong experiment, not just a wrong file |
+
+**Commands you can copy**
+
+```bash
+node dist-cli/labflow.mjs validate 261123            # exit 0 pass / 1 problems / 2 usage error
+node dist-cli/labflow.mjs calc 261123                # final composition and volume per tube
+node dist-cli/labflow.mjs export 261123 --out "D:\学习\labflow\导出\261123"
+```
+
+> Build them first if you haven't: `npm run build:cli`. All three compute only — they never write to project files.
+
+> **Honest note**: these three CLI commands require the source repo (`npm run build:cli` produces `dist-cli/labflow.mjs`). **The installer and portable builds currently ship without the CLI**: after installing, the agent can only read/write the `.yml` files directly and use the "Check" button in the app. If you only installed the packaged build, treat these commands as a reference for what the agent is supposed to do.
+
+**Two reload cases**: when the top bar shows "project file modified externally", click "Reload"; when saving pops up "Reload / Overwrite", choose **Reload** (= keep the version the agent wrote to disk) — "Overwrite" writes the stale UI content back.
+
+---
+
 ## Development
 
 ### Desktop mode (main form)
