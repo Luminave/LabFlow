@@ -39,7 +39,7 @@
 
 ---
 
-![实验模拟](screenshots/实验模拟功能（主图）.png)
+![实验模拟](docs/screenshots/实验模拟功能（主图）.png)
 
 ## 🚀 快速开始
 
@@ -73,7 +73,7 @@ npm run dev
 
 ### 📦 试剂仓库管理
 
-![试剂仓库](screenshots/试剂仓库截图.png)
+![试剂仓库](docs/screenshots/试剂仓库截图.png)
 
 - **CRUD 操作**：添加、编辑、删除试剂，追踪名称、体积、浓度、存储位置
 - **试管分组**：按批次自动命名（如 `260412`），支持 12 种预设颜色随机分配
@@ -97,7 +97,7 @@ npm run dev
 
 ### 🎙️ 讲述者（SOP 生成器）
 
-![讲述者](screenshots/讲述者截图.png)
+![讲述者](docs/screenshots/讲述者截图.png)
 
 - **自动生成 SOP**：将流程图自动转化为线性文本步骤
 - **配置序号**：为试管指定 `configOrder`，讲述者按序号排列操作步骤
@@ -106,7 +106,7 @@ npm run dev
 
 ### 🎨 成分颜色配置
 
-![颜色设置](screenshots/颜色设置截图.png)
+![颜色设置](docs/screenshots/颜色设置截图.png)
 
 - **自定义配色**：为每种成分（如 DNA、RNA、蛋白）设置文字色和背景色
 - **快速预设**：9 色快速色板，一键应用
@@ -115,7 +115,7 @@ npm run dev
 
 ### 💾 数据备份
 
-![数据备份](screenshots/数据备份功能截图.png)
+![数据备份](docs/screenshots/数据备份功能截图.png)
 
 - **数据概览**：一目了然查看试剂数、实验记录、试管历史、分组数量等统计
 - **定时自动备份**：默认每 30 分钟自动备份，支持自定义间隔
@@ -183,7 +183,7 @@ LabFlow/
 ├── vite.config.browser.ts     # 浏览器模式 Vite 配置
 ├── LabFlow-Installer.bat      # Windows 一键安装脚本
 ├── Start-LabFlow.bat          # Windows 启动脚本
-└── screenshots/               # README 截图
+└── docs/screenshots/          # README 截图
 ```
 
 ---

@@ -23,7 +23,7 @@
 
 ---
 
-![Experiment Simulation](screenshots/实验模拟功能（主图）.png)
+![Experiment Simulation](docs/screenshots/实验模拟功能（主图）.png)
 
 ## 🚀 Quick Start
 
@@ -57,7 +57,7 @@ npm run dev
 
 ### 📦 Reagent Warehouse
 
-![Reagent Warehouse](screenshots/试剂仓库截图.png)
+![Reagent Warehouse](docs/screenshots/试剂仓库截图.png)
 
 - **CRUD Operations**: Add, edit, delete reagents. Track name, volume, concentration, storage location
 - **Tube Grouping**: Auto-named by batch (e.g. `260412`), 12 preset colors randomly assigned
@@ -81,7 +81,7 @@ npm run dev
 
 ### 🎙️ Narrator (SOP Generator)
 
-![Narrator](screenshots/讲述者截图.png)
+![Narrator](docs/screenshots/讲述者截图.png)
 
 - **Auto-generate SOP**: Converts flowcharts into linear text steps
 - **Config Order**: Assign `configOrder` to tubes, narrator follows the sequence
@@ -90,7 +90,7 @@ npm run dev
 
 ### 🎨 Component Color Configuration
 
-![Color Settings](screenshots/颜色设置截图.png)
+![Color Settings](docs/screenshots/颜色设置截图.png)
 
 - **Custom Colors**: Set text and background colors for each component (e.g. DNA, RNA, protein)
 - **Quick Presets**: 9-color palette for one-click application
@@ -99,7 +99,7 @@ npm run dev
 
 ### 💾 Data Backup
 
-![Data Backup](screenshots/数据备份功能截图.png)
+![Data Backup](docs/screenshots/数据备份功能截图.png)
 
 - **Data Overview**: At-a-glance statistics — reagent count, experiment records, tube history, group count
 - **Scheduled Auto-backup**: Default every 30 minutes, customizable interval
@@ -167,7 +167,7 @@ LabFlow/
 ├── vite.config.browser.ts     # Browser-mode Vite config
 ├── LabFlow-Installer.bat      # Windows one-click installer
 ├── Start-LabFlow.bat          # Windows launch script
-└── screenshots/               # README screenshots
+└── docs/screenshots/          # README screenshots
 ```
 
 ---
