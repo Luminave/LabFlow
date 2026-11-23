@@ -52,8 +52,10 @@ function BoardCaptureBridge({ experimentId }: { experimentId: string }) {
   useEffect(() => {
     setBoardCaptureSource({
       experimentId,
-      fitView: async () => {
-        await fitView({ padding: 0.12, duration: 0 })
+      fitView: async (padding?: number) => {
+        // minZoom 要显式压低：React Flow 默认下限 0.5，55 支管的图缩不到那么小，
+        // fitView 会被夹住，导出的 PNG 就会裁掉边
+        await fitView({ padding: padding ?? 0.12, duration: 0, minZoom: 0.05 })
       }
     })
     return () => setBoardCaptureSource(null)

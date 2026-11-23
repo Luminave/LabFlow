@@ -12,8 +12,8 @@
 
 export interface BoardCaptureSource {
   experimentId: string
-  /** 让整张流程图都进入视野（React Flow 的 fitView） */
-  fitView: () => Promise<void>
+  /** 让整张流程图都进入视野（React Flow 的 fitView）；padding 越大留白越多、图越小 */
+  fitView: (padding?: number) => Promise<void>
 }
 
 export interface CaptureRect {
@@ -48,6 +48,59 @@ export function boardRectFromDom(): CaptureRect | null {
   }
 }
 
+/** 所有节点在视口里的并集（没有节点时返回 null） */
+function nodesUnionRect(): CaptureRect | null {
+  const nodes = Array.from(document.querySelectorAll('.react-flow__node')) as HTMLElement[]
+  if (!nodes.length) return null
+  let left = Infinity
+  let top = Infinity
+  let right = -Infinity
+  let bottom = -Infinity
+  for (const node of nodes) {
+    const box = node.getBoundingClientRect()
+    if (box.width <= 0 || box.height <= 0) continue
+    left = Math.min(left, box.left)
+    top = Math.min(top, box.top)
+    right = Math.max(right, box.right)
+    bottom = Math.max(bottom, box.bottom)
+  }
+  if (!Number.isFinite(left) || right <= left) return null
+  return {
+    x: Math.round(left),
+    y: Math.round(top),
+    width: Math.round(right - left),
+    height: Math.round(bottom - top)
+  }
+}
+
+function grow(rect: CaptureRect, by: number): CaptureRect {
+  return {
+    x: Math.round(rect.x - by),
+    y: Math.round(rect.y - by),
+    width: Math.round(rect.width + by * 2),
+    height: Math.round(rect.height + by * 2)
+  }
+}
+
+function intersect(a: CaptureRect, b: CaptureRect): CaptureRect | null {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  const right = Math.min(a.x + a.width, b.x + b.width)
+  const bottom = Math.min(a.y + a.height, b.y + b.height)
+  if (right - x < 40 || bottom - y < 40) return null
+  return { x, y, width: right - x, height: bottom - y }
+}
+
+/** 节点是否真的全在画布可视区内（留一点容差） */
+function fullyInside(union: CaptureRect, board: CaptureRect, tolerance = 12): boolean {
+  return (
+    union.x >= board.x - tolerance &&
+    union.y >= board.y - tolerance &&
+    union.x + union.width <= board.x + board.width + tolerance &&
+    union.y + union.height <= board.y + board.height + tolerance
+  )
+}
+
 function nextFrame(): Promise<void> {
   return new Promise(resolve => {
     if (typeof requestAnimationFrame !== 'function') {
@@ -70,14 +123,26 @@ export async function captureBoardPng(experimentId: string): Promise<string | nu
 
   document.body.classList.add('labflow-capturing')
   try {
-    await current.fitView()
-    // 等两帧让缩放落到 DOM；再等一小段（React Flow 的 transform 与节点测量都是异步的），
-    // 然后补一次 fitView，避免第一次算出来的缩放偏大、图被裁掉边
+    // 先按常规留白缩到整图；节点测量是异步的，第一遍常常算得偏大，所以量一次再补缩
+    await current.fitView(0.12)
     await nextFrame()
-    await new Promise(resolve => setTimeout(resolve, 180))
-    await current.fitView()
-    await nextFrame()
-    const rect = boardRectFromDom()
+    await new Promise(resolve => setTimeout(resolve, 160))
+
+    const board = boardRectFromDom()
+    if (!board) return null
+
+    // 还露在画布外面就再放一次（留白 0.3），最多三次，避免死循环
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const union = nodesUnionRect()
+      if (!union || fullyInside(union, board)) break
+      await current.fitView(0.3)
+      await nextFrame()
+      await new Promise(resolve => setTimeout(resolve, 160))
+    }
+
+    // 只截「节点并集 + 40px 留白」与画布可见区的交集：即使 fitView 还差一点，也不会把节点裁掉
+    const union = nodesUnionRect()
+    const rect = union ? intersect(grow(union, 40), board) : board
     if (!rect) return null
     return await capture(rect)
   } catch (error) {
