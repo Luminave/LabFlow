@@ -32,6 +32,14 @@ interface BackupAPI {
   stopAutoBackup: () => Promise<{ success: boolean }>
 }
 
+// Agent 集成（skill 随包附带）
+interface AgentAPI {
+  /** 返回本机 skill 的绝对路径（打包版在 resources/skills） */
+  getSkillPath: () => Promise<{ path: string; exists: boolean }>
+  /** 在资源管理器中定位 SKILL.md */
+  openSkillFolder: () => Promise<{ ok: boolean; error?: string }>
+}
+
 // 存储配置
 interface StorageConfig {
   dbPath: string
@@ -180,6 +188,7 @@ interface ElectronAPI {
 
   clearAllData: () => Promise<{ success: boolean; error?: string }>
   backup: BackupAPI
+  agent?: AgentAPI
   config: ConfigAPI
   exportProject: (payload: {
     directory?: string

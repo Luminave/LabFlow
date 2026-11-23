@@ -1347,6 +1347,26 @@ ipcMain.handle('backup:open-folder', async () => {
   shell.openPath(dir)
 })
 
+// ==================== Agent 集成：skill 路径 ====================
+
+// 打包版随包附带 skills/（extraResources），开发模式直接用仓库里的
+function getSkillFilePath(): string {
+  const base = app.isPackaged ? process.resourcesPath : app.getAppPath()
+  return path.join(base, 'skills', 'labflow-project', 'SKILL.md')
+}
+
+ipcMain.handle('agent:get-skill-path', () => {
+  const skillPath = getSkillFilePath()
+  return { path: skillPath, exists: fs.existsSync(skillPath) }
+})
+
+ipcMain.handle('agent:open-skill-folder', () => {
+  const skillPath = getSkillFilePath()
+  if (!fs.existsSync(skillPath)) return { ok: false, error: 'skill not found' }
+  shell.showItemInFolder(skillPath)
+  return { ok: true }
+})
+
 // 启动自动备份
 ipcMain.handle('backup:start-auto-backup', async (_, intervalMinutes: number, localStorageData: Record<string, string | null>) => {
   startAutoBackup(intervalMinutes * 60 * 1000, localStorageData)

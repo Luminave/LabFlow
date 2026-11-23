@@ -28,6 +28,9 @@ export default function BackupPage() {
   } = useBackupStore()
 
   const [intervalInput, setIntervalInput] = useState(settings.intervalMinutes.toString())
+  const [skillPath, setSkillPath] = useState<string | null>(null)
+  const [skillExists, setSkillExists] = useState(false)
+  const [skillCopied, setSkillCopied] = useState(false)
   const isElectron = !!window.electronAPI
 
   useEffect(() => {
@@ -40,6 +43,36 @@ export default function BackupPage() {
   useEffect(() => {
     setIntervalInput(settings.intervalMinutes.toString())
   }, [settings.intervalMinutes])
+
+  // Agent 集成：拿到本机 SKILL.md 的绝对路径（打包版在 resources/skills 下）
+  useEffect(() => {
+    if (!isElectron) return
+    window.electronAPI?.agent?.getSkillPath()
+      .then((res) => {
+        if (res?.path) {
+          setSkillPath(res.path)
+          setSkillExists(!!res.exists)
+        }
+      })
+      .catch(() => {})
+  }, [isElectron])
+
+  const handleCopySkillPath = async () => {
+    if (!skillPath) return
+    try {
+      await navigator.clipboard.writeText(skillPath)
+      setSkillCopied(true)
+      setTimeout(() => setSkillCopied(false), 2000)
+    } catch {
+      // 剪贴板不可用时退回选中提示
+      alert(skillPath)
+    }
+  }
+
+  const handleOpenSkillFolder = async () => {
+    if (!skillPath) return
+    await window.electronAPI?.agent?.openSkillFolder()
+  }
 
   // 导出备份
   const handleExport = async () => {
@@ -381,6 +414,47 @@ export default function BackupPage() {
               </li>
             )}
           </ul>
+        </div>
+
+        {/* Agent 集成 · skill */}
+        <div className={styles.agentSection}>
+          <h3>{language === 'zh' ? '🤖 Agent 集成 · skill' : '🤖 Agent Integration · skill'}</h3>
+          <p className={styles.agentDesc}>
+            {language === 'zh'
+              ? '把 skills/labflow-project/SKILL.md 复制到你的 Agent skill 目录（DSH 是 ~/.dsh/skills/labflow-project/）。'
+              : 'Copy skills/labflow-project/SKILL.md into your agent skill directory (for DSH: ~/.dsh/skills/labflow-project/).'}
+          </p>
+          <div className={styles.agentPathBox}>
+            <span className={styles.agentPathLabel}>
+              {language === 'zh' ? '本机路径' : 'Local path'}
+            </span>
+            <code className={styles.agentPathValue}>{skillPath || '...'}</code>
+          </div>
+          <div className={styles.agentActions}>
+            <button
+              className={styles.linkBtn}
+              onClick={handleCopySkillPath}
+              disabled={!skillPath || !skillExists}
+            >
+              {skillCopied
+                ? (language === 'zh' ? '✅ 已复制' : '✅ Copied')
+                : (language === 'zh' ? '📋 复制 skill 路径' : '📋 Copy skill path')}
+            </button>
+            <button
+              className={styles.linkBtn}
+              onClick={handleOpenSkillFolder}
+              disabled={!skillPath || !skillExists}
+            >
+              {language === 'zh' ? '📂 打开所在文件夹' : '📂 Open containing folder'}
+            </button>
+          </div>
+          {(!isElectron || (skillPath && !skillExists)) && (
+            <p className={styles.disabledNote}>
+              {!isElectron
+                ? (language === 'zh' ? '需要 Electron 环境' : 'Requires Electron environment')
+                : (language === 'zh' ? '未找到 SKILL.md，请重新安装 LabFlow' : 'SKILL.md not found — please reinstall LabFlow')}
+            </p>
+          )}
         </div>
       </div>
     </div>

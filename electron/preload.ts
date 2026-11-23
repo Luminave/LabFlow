@@ -63,6 +63,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stopAutoBackup: () => ipcRenderer.invoke('backup:stop-auto-backup'),
   },
 
+  // Agent 集成：打包版随包附带的 skill
+  agent: {
+    getSkillPath: () => ipcRenderer.invoke('agent:get-skill-path'),
+    openSkillFolder: () => ipcRenderer.invoke('agent:open-skill-folder')
+  },
+
   // 存储路径配置
   config: {
     getStorage: () => ipcRenderer.invoke('config:get-storage'),

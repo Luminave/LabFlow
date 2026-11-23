@@ -515,8 +515,65 @@
   width: fit-content;
 }
 
-.linkBtn:hover {
+.linkBtn:hover:not(:disabled) {
   background: #eff6ff;
+}
+
+.linkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Agent 集成 · skill */
+.agentSection {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.agentSection h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 10px 0;
+}
+
+.agentDesc {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.7;
+  margin: 0 0 14px 0;
+}
+
+.agentPathBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.agentPathLabel {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.agentPathValue {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.agentActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .disabledNote {
