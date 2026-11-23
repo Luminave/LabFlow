@@ -8,11 +8,19 @@
 
 | Edition | File | Notes |
 |---|---|---|
-| **Installer (recommended)** | `LabFlow Setup 0.2.18.exe` | Adds Start-menu / desktop entries and registers the `labflow://` protocol, so notes and web pages can open a project directly |
-| **Portable** | `LabFlow 0.2.18.exe` | No installation, no registry writes — double-click to run; copy it to another machine and it still works |
+| **Installer (recommended)** | `LabFlow Setup 0.2.19.exe` | Adds Start-menu / desktop entries and registers the `labflow://` protocol, so notes and web pages can open a project directly |
+| **Portable** | `LabFlow 0.2.19.exe` | No installation, no registry writes — double-click to run; copy it to another machine and it still works |
 
 > On first launch Windows may warn about an unknown publisher — click **More info → Run anyway**.
-> GitHub replaces spaces in asset names with dots: the installer downloads as `LabFlow.Setup.0.2.18.exe` (same file).
+> GitHub replaces spaces in asset names with dots: the installer downloads as `LabFlow.Setup.0.2.19.exe` (same file).
+
+---
+
+## 🆕 What's New in v0.2.19
+
+- 📦 **Skill and CLI now ship with the app**: `skills/` and `dist-cli/` are packaged into the installer, so `<install dir>\resources\` contains `skills/labflow-project/SKILL.md` and `dist-cli/labflow.mjs` — no need to fetch them from the repo
+- 🤖 **New "Agent Integration · skill" card on the Data Backup page**: copy the local skill path or open its folder in one click
+- 🧹 **README paths generalized**: export examples now use `D:\labflow\导出\<project>`, no hard-coded personal path
 
 ---
 
@@ -58,13 +66,13 @@
 
 ### Windows installer (recommended)
 
-1. Download `LabFlow Setup 0.2.18.exe` from [Releases](https://github.com/Luminave/LabFlow/releases/latest)
+1. Download `LabFlow Setup 0.2.19.exe` from [Releases](https://github.com/Luminave/LabFlow/releases/latest)
 2. Run it (unknown publisher → More info → Run anyway)
 3. Launch from the Start menu or desktop shortcut; the `labflow://` protocol is registered
 
 ### Windows portable
 
-1. Download `LabFlow 0.2.18.exe` from the same Releases page
+1. Download `LabFlow 0.2.19.exe` from the same Releases page
 2. Double-click to run — no install, no registry (no `labflow://` deep links, everything else identical)
 
 ### From source (Windows / Linux / macOS)
@@ -216,12 +224,12 @@ LabFlow's source of truth is plain text (`仓库.yml` + `工程/<name>.yml`), so
 
 ### After installing LabFlow: how to get your agent to use the skill
 
-The installer only ships the app — **it does not bundle `skills/`**. A freshly installed machine has no `SKILL.md`, so grab a copy first.
+The installer and portable builds now **bundle `skills/`**, so it is ready right after installation.
 
-**1. Get `SKILL.md`** (pick one)
+**1. Get `SKILL.md`**
 
-- Download from the repo: [`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md) (open it and copy the whole text, or save the page);
-- If you already cloned the repo, use `skills/labflow-project/SKILL.md` from your clone.
+- **The installer already ships it**: `<install dir>\resources\skills\labflow-project\SKILL.md` (default: `C:\Users\<your-user>\AppData\Local\Programs\LabFlow\resources\skills\labflow-project\SKILL.md`). Or open **Data Backup → Agent Integration** in the app and click "Copy skill path" / "Open containing folder";
+- Alternative: download from the repo ([`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md)), or use the file from a local clone.
 
 The file must be named `SKILL.md` and its folder must be named `labflow-project` — those two names are how the agent finds the skill; rename them and it will not be loaded.
 
@@ -256,12 +264,12 @@ The file must be named `SKILL.md` and its folder must be named `labflow-project`
 ```bash
 node dist-cli/labflow.mjs validate 261123            # exit 0 pass / 1 problems / 2 usage error
 node dist-cli/labflow.mjs calc 261123                # final composition and volume per tube
-node dist-cli/labflow.mjs export 261123 --out "D:\学习\labflow\导出\261123"
+node dist-cli/labflow.mjs export 261123 --out "D:\labflow\导出\261123"
 ```
 
 > Build them first if you haven't: `npm run build:cli`. All three compute only — they never write to project files.
 
-> **Honest note**: these three CLI commands require the source repo (`npm run build:cli` produces `dist-cli/labflow.mjs`). **The installer and portable builds currently ship without the CLI**: after installing, the agent can only read/write the `.yml` files directly and use the "Check" button in the app. If you only installed the packaged build, treat these commands as a reference for what the agent is supposed to do.
+> **Honest note**: the installer now ships `dist-cli/labflow.mjs` (under `<install dir>\resources\dist-cli\`; the portable build has it in the `resources` folder it unpacks to), so point the commands at that path — **but Node must be installed** (`node -v` prints a version). The source repo still uses `npm run build:cli`.
 
 **Two reload cases**: when the top bar shows "project file modified externally", click "Reload"; when saving pops up "Reload / Overwrite", choose **Reload** (= keep the version the agent wrote to disk) — "Overwrite" writes the stale UI content back.
 

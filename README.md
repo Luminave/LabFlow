@@ -16,11 +16,19 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| **安装版（推荐）** | `LabFlow Setup 0.2.18.exe` | 装进开始菜单和桌面，装完支持 `labflow://` 深链接，可从笔记 / 网页直接唤起并打开工程 |
-| **便携版** | `LabFlow 0.2.18.exe` | 免安装，双击即用，不写注册表；换机器拷走就能用 |
+| **安装版（推荐）** | `LabFlow Setup 0.2.19.exe` | 装进开始菜单和桌面，装完支持 `labflow://` 深链接，可从笔记 / 网页直接唤起并打开工程 |
+| **便携版** | `LabFlow 0.2.19.exe` | 免安装，双击即用，不写注册表；换机器拷走就能用 |
 
 > Windows 第一次运行可能提示「未知发布者」，点 **更多信息 → 仍要运行** 即可。
-> GitHub 会把文件名里的空格换成点：安装版下载下来叫 `LabFlow.Setup.0.2.18.exe`，是同一个文件。
+> GitHub 会把文件名里的空格换成点：安装版下载下来叫 `LabFlow.Setup.0.2.19.exe`，是同一个文件。
+
+---
+
+## 🆕 v0.2.19 更新内容
+
+- 📦 **skill 与 CLI 随包附带**：`skills/` 与 `dist-cli/` 一起打进安装包，装完在 `<安装目录>\resources\` 下就有 `skills/labflow-project/SKILL.md` 和 `dist-cli/labflow.mjs`，不用再去仓库里找
+- 🤖 **「数据备份」页新增「Agent 集成 · skill」卡片**：一键复制本机 skill 路径、打开所在文件夹
+- 🧹 **README 路径通用化**：导出目录示例改成 `D:\labflow\导出\<工程名>`，不再写死个人路径
 
 ---
 
@@ -74,13 +82,13 @@
 
 ### Windows 安装版（推荐）
 
-1. 到 [Releases](https://github.com/Luminave/LabFlow/releases/latest) 下载 `LabFlow Setup 0.2.18.exe`
+1. 到 [Releases](https://github.com/Luminave/LabFlow/releases/latest) 下载 `LabFlow Setup 0.2.19.exe`
 2. 双击安装（提示「未知发布者」→ 更多信息 → 仍要运行）
 3. 从开始菜单或桌面快捷方式启动；装完支持 `labflow://` 深链接
 
 ### Windows 便携版
 
-1. 同样在 Releases 页面下载 `LabFlow 0.2.18.exe`
+1. 同样在 Releases 页面下载 `LabFlow 0.2.19.exe`
 2. 双击即用，不安装、不写注册表（没有 `labflow://` 深链接，其余功能一致）
 
 ### 从源码运行（Windows / Linux / macOS）
@@ -232,12 +240,12 @@ LabFlow 的真相是纯文本（`仓库.yml` + `工程/<名>.yml`），Agent 可
 
 ### 装好 LabFlow 之后，怎么让 Agent 用上 skill
 
-安装包只打包了运行程序，**没有打包 `skills/`**——所以刚装好的机器上没有 `SKILL.md`，得自己去拿一份。
+安装版和便携版现在**已经自带 `skills/`**，装好就能用，不用再去仓库找文件。
 
-**1. 先拿到 SKILL.md**（两条路，二选一）
+**1. 先拿到 SKILL.md**
 
-- 从仓库下载：[`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md)（浏览器打开后全选复制，或右键另存为）；
-- 已经在本地 clone 过仓库的，直接用仓库里的 `skills/labflow-project/SKILL.md`。
+- **安装版已自带**：路径是 `<安装目录>\resources\skills\labflow-project\SKILL.md`（默认装在 `C:\Users\<你的用户名>\AppData\Local\Programs\LabFlow\resources\skills\labflow-project\SKILL.md`）。也可以在应用里打开「数据备份 → Agent 集成」卡片，点「复制 skill 路径」拿到本机实际路径，点「打开所在文件夹」直接定位；
+- 备选：从仓库下载 [`skills/labflow-project/SKILL.md`](https://raw.githubusercontent.com/Luminave/LabFlow/master/skills/labflow-project/SKILL.md)（浏览器打开后全选复制，或右键另存为），或直接用本地 clone 仓库里的同名文件。
 
 文件名必须叫 `SKILL.md`，所在文件夹必须叫 `labflow-project`——这两个名字是 Agent 认出这个 skill 的依据，改名就读不到。
 
@@ -272,12 +280,12 @@ LabFlow 的真相是纯文本（`仓库.yml` + `工程/<名>.yml`），Agent 可
 ```bash
 node dist-cli/labflow.mjs validate 261123            # 退出码 0 通过 / 1 有问题 / 2 用法错
 node dist-cli/labflow.mjs calc 261123                # 每管最终成分与体积
-node dist-cli/labflow.mjs export 261123 --out "D:\学习\labflow\导出\261123"
+node dist-cli/labflow.mjs export 261123 --out "D:\labflow\导出\261123"
 ```
 
 > 没构建过就先 `npm run build:cli`。这三个命令默认**只算不写**，不动任何工程文件。
 
-> **诚实说明**：上面这三条 CLI 命令需要源码仓库（`npm run build:cli` 生成 `dist-cli/labflow.mjs`）。**安装版和便携版目前不带 CLI**，装完只能靠 Agent 直接读写 `.yml` 加应用里的「检查」按钮；如果你只装了安装版，把这三条命令当成"给 Agent 看它该做什么"的参考即可。
+> **诚实说明**：安装版现在**自带 `dist-cli/labflow.mjs`**（在 `<安装目录>\resources\dist-cli\`，便携版同理在它解包出的 `resources` 目录），把命令里的 `dist-cli/labflow.mjs` 换成这个路径即可；**但本机要有 Node**（`node -v` 能输出版本号）才能跑。源码仓库仍用 `npm run build:cli` 生成。
 
 **重载的两种情形**：顶栏挂出「工程文件已被外部修改」时点「重新载入」；保存时弹出「重新载入 / 覆盖」，选**重新载入**（= 保留 Agent 写的磁盘版本），选「覆盖」就把界面旧内容写回去了。
 
@@ -296,7 +304,7 @@ node dist-cli/labflow.mjs export 261123 --out "D:\学习\labflow\导出\261123"
 | 白板 `.canvas` | **关** | 坐标归应用管，在 Obsidian 里改完一重存就丢 |
 | 数据 `.yml` 副本 | **关** | 只当备份、永不回读，留着只会和正本混淆 |
 
-**目录放哪**：在 vault 里建一个固定目录，例如 `D:\学习\labflow\导出\<工程名>`，一个工程一个子目录。
+**目录放哪**：在 vault 里建一个固定目录，例如 `D:\labflow\导出\<工程名>`，一个工程一个子目录。
 
 **笔记里怎么引**
 
@@ -350,7 +358,7 @@ npm test             # Vitest
 | 问题 | 解决方案 |
 |------|----------|
 | 提示「未知发布者」/ SmartScreen 拦截 | 点「更多信息 → 仍要运行」 |
-| 点 `labflow://` 链接没反应 | 深链接只由**安装版**注册；便携版请直接打开 `LabFlow 0.2.18.exe` |
+| 点 `labflow://` 链接没反应 | 深链接只由**安装版**注册；便携版请直接打开 `LabFlow 0.2.19.exe` |
 | 装了新版但界面还是旧的 | 关掉托盘里的旧进程再启动；数据在本地，不会被覆盖 |
 | `npm 不是内部命令` | 安装 Node.js 后重启终端 |
 | 源码模式下窗口白屏 | 先确认 `npm run electron:dev` 的 Vite 已起在 5173 端口 |
