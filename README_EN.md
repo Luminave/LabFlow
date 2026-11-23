@@ -2,6 +2,35 @@
 
 > A visual laboratory reagent management and experiment workflow simulator — making experiment design more intuitive and efficient
 
+## ⬇️ Download
+
+👉 **[Get the latest release](https://github.com/Luminave/LabFlow/releases/latest)**
+
+| Edition | File | Notes |
+|---|---|---|
+| **Installer (recommended)** | `LabFlow Setup 0.2.18.exe` | Adds Start-menu / desktop entries and registers the `labflow://` protocol, so notes and web pages can open a project directly |
+| **Portable** | `LabFlow 0.2.18.exe` | No installation, no registry writes — double-click to run; copy it to another machine and it still works |
+
+> On first launch Windows may warn about an unknown publisher — click **More info → Run anyway**.
+> GitHub replaces spaces in asset names with dots: the installer downloads as `LabFlow.Setup.0.2.18.exe` (same file).
+
+---
+
+## 🆕 What's New in v0.2.18
+
+- 🔒 **`concentration_mismatch` when nominal and reachable concentration differ by more than 5%**: a recipe that claims a nominal concentration but cannot be reached through the transfer graph now fails validation instead of silently producing an impossible dilution plan
+- 🖼️ **Auto `fitView` before exporting screenshots**: `minZoom 0.05` plus the union of all node bounds, so dense boards are no longer cropped
+- 📄 **Project source of truth moved to plain files**: `仓库.yml` + `工程/<name>.yml`; the UI reads from disk when a project is opened, and agents can read/write the files directly
+- 🔐 **Agent lock + `labflow` CLI**: the lock blocks every write entry point and cannot be stolen by another owner; `validate / calc / export` compute only and never write by default
+- 🔗 **`labflow://` deep links**: open a project from Obsidian, a web page or an agent, including cold start
+- 🧩 **`labflow-project` skill and agent operating rules**: new skill plus `docs/数据正本与Agent协作.md`, fixing the "write → validate → tell the user to reload" loop
+- 🪟 **Screenshot folder moved**: `screenshots/` → `docs/screenshots/`
+- 🐛 Also: tighter settlement / revert bounds, hash-based conflict detection, deleting a project now archives it, file watcher covers the `工程/` subdirectory, file-only projects now show up in the project list
+
+> v0.2.4–v0.2.17: internal iterations (input freeze fixes, database transactions and backups, app icons and packaging, drag-connect bugs) — see the commit history.
+
+---
+
 ## 🆕 What's New in v0.2.3
 
 - 🐛 **Fix**: Narrator page could not be scrolled with mouse wheel
@@ -27,29 +56,28 @@
 
 ## 🚀 Quick Start
 
-### Windows (Recommended)
+### Windows installer (recommended)
 
-1. **Download the installer**
-   👉 [Download LabFlow-Installer.bat](https://raw.githubusercontent.com/Luminave/LabFlow/main/LabFlow-Installer.bat)
+1. Download `LabFlow Setup 0.2.18.exe` from [Releases](https://github.com/Luminave/LabFlow/releases/latest)
+2. Run it (unknown publisher → More info → Run anyway)
+3. Launch from the Start menu or desktop shortcut; the `labflow://` protocol is registered
 
-2. **Run the installer**
-   - Right-click `LabFlow-Installer.bat`
-   - Select **"Run as administrator"**
-   - Follow the prompts (Git & Node.js are installed automatically if needed)
+### Windows portable
 
-3. **Launch LabFlow**
-   - A `Start-LabFlow` shortcut will appear on your desktop — double-click to launch
-   - Your browser opens http://localhost:5173/ automatically
+1. Download `LabFlow 0.2.18.exe` from the same Releases page
+2. Double-click to run — no install, no registry (no `labflow://` deep links, everything else identical)
 
-### Linux / macOS
+### From source (Windows / Linux / macOS)
 
 ```bash
 git clone https://github.com/Luminave/LabFlow.git
 cd LabFlow
 npm install
-npm run dev
-# Visit http://localhost:5173/
+npm run electron:dev   # desktop mode (Electron, the main form)
+npm run dev            # browser mode: http://localhost:5173/
 ```
+
+> `LabFlow-Installer.bat` / `Start-LabFlow.bat` are legacy scripts from the browser-only era: they install Git + Node and start `npm run dev`. They are **not** an installation method — use the installers above.
 
 ---
 
@@ -131,13 +159,16 @@ npm run dev
 
 | Technology | Purpose |
 |------------|---------|
+| **Electron** + **electron-builder** | Desktop shell and packaging (installer / portable) |
 | **React 18** + **TypeScript** | Frontend framework |
 | **React Flow** (`@xyflow/react`) | Flowchart visualization |
 | **Zustand** | State management |
-| **sql.js** (SQLite) | Local data storage |
+| **js-yaml** | Reading/writing the plain-file project source (`仓库.yml` / `工程/<name>.yml`) |
+| **sql.js** (SQLite) | Index, history and backups |
 | **Vite** | Build tool & dev server |
 | **react-router-dom** | Routing |
 | **date-fns** | Date utilities |
+| **Vitest** | Unit tests (`tests/`) |
 
 ---
 
@@ -145,7 +176,10 @@ npm run dev
 
 ```
 LabFlow/
+├── electron/                  # Main process (window, deep links, data root, file watcher)
 ├── src/
+│   ├── core/                  # Project source-of-truth files, validation (incl. concentration_mismatch), settlement
+│   ├── cli/                   # CLI `labflow`: validate / calc / export
 │   ├── renderer/              # Renderer process (React app)
 │   │   ├── components/
 │   │   │   ├── Layout.tsx     # Layout (nav bar + version)
@@ -164,17 +198,29 @@ LabFlow/
 │   └── shared/
 │       ├── types/             # TypeScript type definitions
 │       └── utils/             # Utilities (database, backup, etc.)
-├── vite.config.browser.ts     # Browser-mode Vite config
-├── LabFlow-Installer.bat      # Windows one-click installer
-├── Start-LabFlow.bat          # Windows launch script
-└── docs/screenshots/          # README screenshots
+├── docs/                      # Docs and screenshots/ (README images)
+├── skills/labflow-project/    # Skill for agent-assisted project editing
+├── tests/                     # Vitest unit tests
+├── vite.config.ts             # Electron desktop build config
+├── vite.config.browser.ts     # Browser-only Vite config
+├── LabFlow-Installer.bat      # Legacy script (installs Git+Node, runs browser dev server)
+├── Start-LabFlow.bat          # Legacy launcher (same caveat)
+└── package.json
 ```
 
 ---
 
 ## Development
 
-### Browser Mode (Recommended)
+### Desktop mode (main form)
+
+```bash
+npm install
+npm run electron:dev      # Vite + Electron with hot reload
+npm run electron:build    # build installer + portable (output in release/)
+```
+
+### Browser mode (UI debugging)
 
 ```bash
 npm install
@@ -182,14 +228,15 @@ npm run dev
 # Visit http://localhost:5173/
 ```
 
-### Electron Desktop Mode (Experimental)
+> Browser mode has no `labflow://` deep links and cannot touch the local project folder — use it for UI work only.
+
+### CLI and tests
 
 ```bash
-npm install
-npm run electron:dev
+npm run build:cli    # build dist-cli/labflow.mjs
+npm run labflow -- validate 261123
+npm test             # Vitest
 ```
-
-> ⚠️ Electron mode may require additional configuration. Browser mode is recommended.
 
 ---
 
@@ -199,10 +246,11 @@ npm run electron:dev
 
 | Issue | Solution |
 |-------|----------|
-| Installer requires admin | Right-click → Run as administrator |
-| Git / Node.js download slow | Wait patiently, or install manually and re-run |
-| Browser doesn't open | Visit http://localhost:5173/ manually |
+| "Unknown publisher" / SmartScreen block | Click **More info → Run anyway** |
+| `labflow://` links do nothing | Deep links are registered by the **installer** only; the portable build opens the app directly |
+| Still seeing the old UI after updating | Quit the old process (including tray) and relaunch; local data is preserved |
 | `npm not recognized` | Install Node.js, then restart terminal |
+| Blank window in source mode | Make sure the Vite dev server from `npm run electron:dev` is listening on port 5173 |
 
 ### Linux
 

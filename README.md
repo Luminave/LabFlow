@@ -10,6 +10,35 @@
 
 > 实验室试剂管理与实验流程模拟工具 — 让实验设计更直观、更高效
 
+## ⬇️ 下载
+
+👉 **[到 Releases 页面下载最新版](https://github.com/Luminave/LabFlow/releases/latest)**
+
+| 版本 | 文件 | 说明 |
+|---|---|---|
+| **安装版（推荐）** | `LabFlow Setup 0.2.18.exe` | 装进开始菜单和桌面，装完支持 `labflow://` 深链接，可从笔记 / 网页直接唤起并打开工程 |
+| **便携版** | `LabFlow 0.2.18.exe` | 免安装，双击即用，不写注册表；换机器拷走就能用 |
+
+> Windows 第一次运行可能提示「未知发布者」，点 **更多信息 → 仍要运行** 即可。
+> GitHub 会把文件名里的空格换成点：安装版下载下来叫 `LabFlow.Setup.0.2.18.exe`，是同一个文件。
+
+---
+
+## 🆕 v0.2.18 更新内容
+
+- 🔒 **标称浓度与可达浓度差超过 5% 就报错**：按标称浓度配液时，和连线算出的可达浓度一比，差超过 5% 直接报 `concentration_mismatch`，不再静默生成一份配不出来的方案
+- 🖼️ **导出截图前自动 `fitView` 到整图**：`minZoom 0.05` + 所有节点并集取景，画布再密也不会被裁边
+- 📄 **工程正本改为纯文件**：`仓库.yml` + `工程/<名>.yml`，界面只在「打开工程」时读盘；Agent 可以直接读写、也能只算不写
+- 🔐 **Agent 锁 + 命令行 `labflow`**：锁挡住所有写入口、不同 owner 不能互踢；`validate / calc / export` 默认只算不写
+- 🔗 **`labflow://` 深链接**：从 Obsidian、网页或 Agent 直接唤起应用并载入指定工程，冷启动也能打开
+- 🧩 **`labflow-project` skill 与 Agent 操作规程**：新增 skill 与 `docs/数据正本与Agent协作.md`，把「写文件 → validate → 提醒重载」固定下来
+- 🪟 **截图目录调整**：截图从 `screenshots/` 移到 `docs/screenshots/`
+- 🐛 其他：结算 / 回退边界收口、哈希判冲突、删除工程改为归档、热加载补挂 `工程/` 子目录、纯文件新建的工程也会出现在列表里
+
+> v0.2.4–v0.2.17：内部迭代（输入框卡死、数据库事务与备份、应用图标与打包、拖拽连线等修复），详见提交历史。
+
+---
+
 ## 🆕 v0.2.3 更新内容
 
 - 🐛 **修复**：讲述者页面无法通过鼠标滚轮滚动的问题
@@ -43,29 +72,28 @@
 
 ## 🚀 快速开始
 
-### Windows 用户（推荐一键安装）
+### Windows 安装版（推荐）
 
-1. **下载安装脚本**
-   👉 [点击下载 LabFlow-Installer.bat](https://raw.githubusercontent.com/Luminave/LabFlow/main/LabFlow-Installer.bat)
+1. 到 [Releases](https://github.com/Luminave/LabFlow/releases/latest) 下载 `LabFlow Setup 0.2.18.exe`
+2. 双击安装（提示「未知发布者」→ 更多信息 → 仍要运行）
+3. 从开始菜单或桌面快捷方式启动；装完支持 `labflow://` 深链接
 
-2. **运行安装脚本**
-   - 右键点击下载的 `LabFlow-Installer.bat`
-   - 选择 **"以管理员身份运行"**
-   - 按照提示完成安装（自动安装 Git 和 Node.js）
+### Windows 便携版
 
-3. **启动 LabFlow**
-   - 桌面会出现 `Start-LabFlow` 快捷方式，双击即可启动
-   - 浏览器自动打开 http://localhost:5173/
+1. 同样在 Releases 页面下载 `LabFlow 0.2.18.exe`
+2. 双击即用，不安装、不写注册表（没有 `labflow://` 深链接，其余功能一致）
 
-### Linux / macOS 用户
+### 从源码运行（Windows / Linux / macOS）
 
 ```bash
 git clone https://github.com/Luminave/LabFlow.git
 cd LabFlow
 npm install
-npm run dev
-# 访问 http://localhost:5173/
+npm run electron:dev   # 桌面模式（Electron，主形态）
+npm run dev            # 浏览器模式：http://localhost:5173/
 ```
+
+> 仓库里的 `LabFlow-Installer.bat` / `Start-LabFlow.bat` 是早期的一键脚本：它先装 Git + Node，再跑 `npm run dev` 起浏览器开发服务器。**这不是正式安装方式**，只建议源码调试时用；装正式版请用上面的安装包。
 
 ---
 
@@ -147,13 +175,16 @@ npm run dev
 
 | 技术 | 用途 |
 |------|------|
+| **Electron** + **electron-builder** | 桌面应用外壳与打包（安装版 / 便携版） |
 | **React 18** + **TypeScript** | 前端框架 |
 | **React Flow** (`@xyflow/react`) | 流程图可视化 |
 | **Zustand** | 状态管理 |
-| **sql.js** (SQLite) | 本地数据存储 |
+| **js-yaml** | 工程正本（`仓库.yml` / `工程/<名>.yml`）读写 |
+| **sql.js** (SQLite) | 索引、历史与备份 |
 | **Vite** | 构建与开发服务器 |
 | **react-router-dom** | 页面路由 |
 | **date-fns** | 日期处理 |
+| **Vitest** | 单元测试（`tests/`） |
 
 ---
 
@@ -161,7 +192,10 @@ npm run dev
 
 ```
 LabFlow/
+├── electron/                  # 主进程（窗口、深链接、数据根目录、文件监听）
 ├── src/
+│   ├── core/                  # 工程正本、校验（含 concentration_mismatch）、结算
+│   ├── cli/                   # 命令行 labflow：validate / calc / export
 │   ├── renderer/              # 渲染进程（React 应用）
 │   │   ├── components/
 │   │   │   ├── Layout.tsx     # 布局（导航栏 + 版本号）
@@ -180,10 +214,14 @@ LabFlow/
 │   └── shared/
 │       ├── types/             # TypeScript 类型定义
 │       └── utils/             # 工具函数（数据库、备份等）
-├── vite.config.browser.ts     # 浏览器模式 Vite 配置
-├── LabFlow-Installer.bat      # Windows 一键安装脚本
-├── Start-LabFlow.bat          # Windows 启动脚本
-└── docs/screenshots/          # README 截图
+├── docs/                      # 文档与截图（screenshots/）
+├── skills/labflow-project/    # 配合 Agent 用的 skill
+├── tests/                     # Vitest 单元测试
+├── vite.config.ts             # Electron 桌面模式构建配置
+├── vite.config.browser.ts     # 纯浏览器模式 Vite 配置
+├── LabFlow-Installer.bat      # 早期一键脚本（装 Git+Node 后跑浏览器 dev，非正式安装方式）
+├── Start-LabFlow.bat          # 早期启动脚本（同上）
+└── package.json
 ```
 
 ---
@@ -251,7 +289,15 @@ SOP 头部还带一条 `labflow://open?project=<工程名>` 链接，在 Obsidia
 
 ## 开发
 
-### 浏览器模式（推荐）
+### 桌面模式（主形态）
+
+```bash
+npm install
+npm run electron:dev      # Vite + Electron，热更新
+npm run electron:build    # 打安装版与便携版（产物在 release/）
+```
+
+### 浏览器模式（调试用）
 
 ```bash
 npm install
@@ -259,14 +305,15 @@ npm run dev
 # 访问 http://localhost:5173/
 ```
 
-### Electron 桌面应用模式（实验性）
+> 浏览器模式没有 `labflow://` 深链接，也不能直接读写本机的工程目录，只适合调界面。
+
+### 命令行与测试
 
 ```bash
-npm install
-npm run electron:dev
+npm run build:cli    # 构建 dist-cli/labflow.mjs
+npm run labflow -- validate 261123
+npm test             # Vitest
 ```
-
-> ⚠️ Electron 模式可能需要额外配置，建议优先使用浏览器模式。
 
 ---
 
@@ -276,10 +323,11 @@ npm run electron:dev
 
 | 问题 | 解决方案 |
 |------|----------|
-| 安装脚本需要管理员权限 | 右键 → 以管理员身份运行 |
-| Git / Node.js 下载慢 | 耐心等待，或手动安装后重试 |
-| 浏览器未自动打开 | 手动访问 http://localhost:5173/ |
+| 提示「未知发布者」/ SmartScreen 拦截 | 点「更多信息 → 仍要运行」 |
+| 点 `labflow://` 链接没反应 | 深链接只由**安装版**注册；便携版请直接打开 `LabFlow 0.2.18.exe` |
+| 装了新版但界面还是旧的 | 关掉托盘里的旧进程再启动；数据在本地，不会被覆盖 |
 | `npm 不是内部命令` | 安装 Node.js 后重启终端 |
+| 源码模式下窗口白屏 | 先确认 `npm run electron:dev` 的 Vite 已起在 5173 端口 |
 
 ### Linux
 
