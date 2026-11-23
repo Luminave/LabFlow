@@ -101,8 +101,6 @@ npm run electron:dev   # 桌面模式（Electron，主形态）
 npm run dev            # 浏览器模式：http://localhost:5173/
 ```
 
-> 仓库里的 `LabFlow-Installer.bat` / `Start-LabFlow.bat` 是早期的一键脚本：它先装 Git + Node，再跑 `npm run dev` 起浏览器开发服务器。**这不是正式安装方式**，只建议源码调试时用；装正式版请用上面的安装包。
-
 ---
 
 ## 功能特性
@@ -227,8 +225,6 @@ LabFlow/
 ├── tests/                     # Vitest 单元测试
 ├── vite.config.ts             # Electron 桌面模式构建配置
 ├── vite.config.browser.ts     # 纯浏览器模式 Vite 配置
-├── LabFlow-Installer.bat      # 早期一键脚本（装 Git+Node 后跑浏览器 dev，非正式安装方式）
-├── Start-LabFlow.bat          # 早期启动脚本（同上）
 └── package.json
 ```
 

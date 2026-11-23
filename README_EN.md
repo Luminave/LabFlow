@@ -85,8 +85,6 @@ npm run electron:dev   # desktop mode (Electron, the main form)
 npm run dev            # browser mode: http://localhost:5173/
 ```
 
-> `LabFlow-Installer.bat` / `Start-LabFlow.bat` are legacy scripts from the browser-only era: they install Git + Node and start `npm run dev`. They are **not** an installation method — use the installers above.
-
 ---
 
 ## Features
@@ -211,8 +209,6 @@ LabFlow/
 ├── tests/                     # Vitest unit tests
 ├── vite.config.ts             # Electron desktop build config
 ├── vite.config.browser.ts     # Browser-only Vite config
-├── LabFlow-Installer.bat      # Legacy script (installs Git+Node, runs browser dev server)
-├── Start-LabFlow.bat          # Legacy launcher (same caveat)
 └── package.json
 ```
 
