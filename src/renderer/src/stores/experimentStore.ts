@@ -20,6 +20,7 @@ import { useWarehouseStore } from './warehouseStore'
 import { flushWarehouseWrite } from '../utils/warehouseWriteQueue'
 import { loadWarehouseFile, restoreWarehouseContent } from '../utils/warehouseSource'
 import { AgentLockError, assertProjectWritable, notifyWriteDeferred } from '../utils/agentLock'
+import { clearSaveAlert, reportSaveAlert } from './saveAlert'
 import { blendConcentration, mergeSubstancePlaceholders } from '@/core/mix'
 
 const CURRENT_EXPERIMENT_KEY = 'labflow_current_experiment'
@@ -70,6 +71,8 @@ function debouncedAutoSave(get: () => ExperimentState) {
         console.log('[AutoSave] Experiment saved to database, id:', experiment.id)
       }
       autoSaveDirty = false
+      // 真的写进文件了：撤掉「改动没落盘」的常驻横幅
+      clearSaveAlert()
 
       // 同步更新 experiments 数组
       const experiments = get().experiments
@@ -94,6 +97,8 @@ function debouncedAutoSave(get: () => ExperimentState) {
         return
       }
       console.error('[AutoSave] Failed to save experiment to DB:', e)
+      // 常驻横幅：改动没落盘这件事不许只闪一下
+      reportSaveAlert(`自动保存失败：${(e as Error)?.message || '未知错误'}；改动还只在界面上`)
       notifyAutoSaveFailed((e as Error)?.message || '未知错误')
       // DB 失败时仍然保存到 localStorage
       const experiments = get().experiments
@@ -787,6 +792,8 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         await persistExperiment(experiment, { forceFile: options?.forceFile })
         console.log('[saveCurrentExperiment] 保存成功')
       }
+      // 写盘成功：撤掉「改动没落盘」的常驻横幅
+      clearSaveAlert()
       
       const experiments = get().experiments
       const existingIndex = experiments.findIndex(e => e.id === experiment.id)
@@ -813,9 +820,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
       return true
     } catch (e) {
       // 工程正本被外部改过：不覆盖、不改 store，交给界面弹「重新载入 / 用界面覆盖」
-      if (e instanceof ProjectFileConflictError) throw e
+      if (e instanceof ProjectFileConflictError) {
+        reportSaveAlert('工程文件已被外部修改，界面上的改动还没写进去')
+        throw e
+      }
       // 本工程被 Agent 锁着：一个字都没写，**不许**把它当成「保存成功」记进 store
       if (e instanceof AgentLockError) {
+        reportSaveAlert(`本工程被 Agent 锁着（${e.lock?.owner || '未知'}），改动还没写进去`)
         notifyWriteDeferred(e.lock)
         throw e
       }
@@ -838,6 +849,7 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
         tubePositions: experiment.tubePositions
       })
       console.log('[saveCurrentExperiment] Saved to store+localStorage despite DB error')
+      reportSaveAlert(`保存出错：${(e as Error)?.message || '未知错误'}；改动还只在界面上`)
       return false
     }
   },
@@ -1100,6 +1112,13 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
   },
   
   updateTubeInExperiment: (tubeId, updates) => {
+    // 找不到这支试管时**不许静默通过**：以前 map 对不上就把数组原样返回，
+    // 主人的改动全部写进空气，界面上看起来就是「改不动」（2026-11-27 事故）。
+    if (!get().currentTubes.some((t) => t.id === tubeId)) {
+      console.warn('[updateTubeInExperiment] 试管不在当前工程里，改动被丢弃：', tubeId)
+      reportSaveAlert('这次修改的对象已经不在当前画布上（工程可能被重新载入过），改动没有生效')
+      return
+    }
     set(state => {
       if (!state.currentExperiment) return state
       const newTubes = state.currentTubes.map(t => t.id === tubeId ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t)
@@ -1810,13 +1829,21 @@ export const useExperimentStore = create<ExperimentState>((set, get) => ({
           ? experiments.find(e => e.id === currentId)
           : undefined
         if (fromFile) {
-          set({
-            currentExperiment: fromFile,
-            currentTubes: fromFile.tubes,
-            connections: fromFile.connections || [],
-            tubePositions: fromFile.tubePositions || []
-          })
-          console.log('[fetchExperiments] 当前工程以正本文件为准：', fromFile.name)
+          // 还有改动没落盘时**不许**用磁盘内容覆盖内存：以前无条件覆盖，
+          // 于是刚加/刚改的东西一切页就没了，页面还握着旧对象继续「保存」进空气
+          // （2026-11-27 事故第 1 条）。
+          if (hasPendingAutoSave()) {
+            console.warn('[fetchExperiments] 有改动未落盘，跳过用正本覆盖当前工程：', fromFile.name)
+            reportSaveAlert('有改动还没写进工程文件，已暂停用磁盘内容覆盖当前画布')
+          } else {
+            set({
+              currentExperiment: fromFile,
+              currentTubes: fromFile.tubes,
+              connections: fromFile.connections || [],
+              tubePositions: fromFile.tubePositions || []
+            })
+            console.log('[fetchExperiments] 当前工程以正本文件为准：', fromFile.name)
+          }
         } else {
           const latestExperiment: Experiment = {
             ...currentState.currentExperiment,

@@ -13,6 +13,7 @@ import ToolsPage from './pages/ToolsPage'
 import BackupPage from './pages/BackupPage'
 import NarratorPage from './pages/NarratorPage'
 import { GlobalToast } from './components/GlobalToast'
+import { SaveFailureBanner } from './components/SaveFailureBanner'
 import { useStoreHotReload } from './utils/storeHotReload'
 import { useWarehouseFileSync } from './utils/warehouseSync'
 
@@ -164,6 +165,7 @@ function App() {
   return (
     <Layout>
       <GlobalToast />
+      <SaveFailureBanner />
       <ErrorBoundary>
         <Routes>
           <Route path="/" element={<HomePage />} />

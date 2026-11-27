@@ -679,9 +679,37 @@ export default function ExperimentPage() {
     })
   }, [connections, currentTubes])
 
+  // 画布被重新载入后，弹窗里握着的可能是一支已经不存在的旧试管：
+  // 以前这种情况下保存会写进空气（updateTubeInExperiment 静默 no-op），
+  // 主人看到的是「怎么改都不动」（2026-11-27 事故第 2 条）。
+  useEffect(() => {
+    if (!editingTube) return
+    const fresh = currentTubes.find(t => t.id === editingTube.id)
+    if (!fresh) {
+      setEditingTube(null)
+      setFormError(null)
+      showGlobalToast(
+        language === 'zh'
+          ? '这支试管已不在当前画布上，编辑窗口已关闭，请重新点开'
+          : 'This tube is no longer on the board; the editor was closed'
+      )
+      return
+    }
+    // 只换引用，不重置表单，避免主人正在输入的内容被冲掉
+    if (fresh !== editingTube) setEditingTube(fresh)
+  }, [currentTubes, editingTube, language])
+
   // 保存试管编辑(同时自动计算)
   const handleSaveTubeEdit = () => {
     if (!editingTube || isReadOnly) return
+
+    // 以画布上的当前试管为准；找不到就说明画布已被换掉，不要再往空气里写
+    const freshTube = currentTubes.find(t => t.id === editingTube.id)
+    if (!freshTube) {
+      setEditingTube(null)
+      showGlobalToast(language === 'zh' ? '这支试管已不在当前画布上，改动没有保存' : 'Tube is gone from the board; nothing saved')
+      return
+    }
 
     // 检查名称唯一性
     const trimmedName = editFormData.name.trim()

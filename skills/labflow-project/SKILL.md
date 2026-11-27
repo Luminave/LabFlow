@@ -40,8 +40,13 @@ description: 在 LabFlow 里新建或修改一个实验工程（配液流程）�
 2. 写/改 `D:\学习\labflow\工程\<名>.yml`。新 UUID 用 `node -e "console.log(crypto.randomUUID())"` 生成；**已有工程的 `project.id` 不许改**（改名、改浓度、改体积都安全）。
 3. `node dist-cli/labflow.mjs validate <名>` —— **退出码必须是 0**。非 0 就按报错逐条改，不许猜。
 4. `node dist-cli/labflow.mjs calc <名>` —— 逐管核对关键浓度、总体积、试剂用量。
-5. **回复里必须写这句**：「在界面顶栏点『重新载入』（或点『打开工程』重新选这个工程），才能看到新内容」。LabFlow **不监听文件**，不点就一直是旧内容。
-6. 等用户重载完，再一起看画布和讲述者，别自己宣布"已经生效"。
+5. **界面会自动热重载，不要叫用户找不存在的按钮**。主进程 `fs.watch` 监听数据根目录与 `工程/`（`electron/main.ts:1808` `watchDir`，150 ms 去抖后 `scheduleStoreScan`），渲染端 `useStoreHotReload`（`src/renderer/src/utils/storeHotReload.ts:90`）按 `planHotReload`（`:46`）决定：
+   - 改的是 `仓库.yml` → **必定自动重载**，并弹 toast「仓库文件已更新，已重新载入」，用户什么都不用做；
+   - 改的是当前开着的工程、且界面没有未保存改动 → 自动重载，toast「工程文件已更新，已重新载入」；
+   - 改的是当前开着的工程、但界面有未保存改动（dirty）→ **不覆盖**，只在实验页顶部挂一条黄条「⚠️ 工程文件已被外部修改：<文件名>」+ 两个按钮「重新载入」「先不管」（`ExperimentPage.tsx:1516-1527`）。
+   所以「重新载入」不是常驻顶栏按钮；只有那条黄条里才有。回复里只说「若已打开这个工程且顶部出现黄条，点『重新载入』」，别许诺一个找不到的按钮。
+   ⚠️ **改 `仓库.yml` 不一定改得动界面**：本机装的若是 **0.2.18 及更早**，仓库页读的是 `C:\Users\<用户名>\AppData\Roaming\labflow\data\labflow.db` 的 `tubes` 表，文件只当备份（实见 2026-11-23）。这种情形要「文件 ＋ 库」两边都改，改完让用户按 **Ctrl+R** 整页重载（切页不重拉库）。0.2.19 起才真正以 `仓库.yml` 为正本。
+6. 别自己宣布"已经生效"：让用户看 toast / 黄条，再一起看画布与讲述者。
 
 ## 四、硬性规则（违反必被校验或主人否定）
 
@@ -109,9 +114,10 @@ node dist-cli/labflow.mjs export <名> --out <目录>   # 只写 SOP（.md）
 | `config_order_missing` / 序号重复跳号 | 漏写 `configOrder` 或编号有洞 | 从 1 连续编到 N，一个不漏 |
 | `concentration_mismatch` | 标称浓度 ≠ 连线可达浓度 | 按 `Σ(v×c)/V` 重算；改体积比也能修正 |
 | `validate --json` 里 message 是空串 | `dist-cli` 是旧构建，缺这个码的文案分支 | `npm run build:cli` 重建即可 |
-| 界面还是旧内容 | 没点「重新载入」（应用不监听文件） | 重新载入，或「打开工程」重选一次 |
+| 界面还是旧内容 | ①窗口没开着（重载只在应用运行时发生）；②改的是**正开着的工程**且界面有未保存改动，热重载被故意拦下挂黄条 | 关掉工程再打开；或点黄条里的「重新载入」 |
 | 单位变成 `µ`、`name:` 引号消失 | 应用自己重存过的痕迹 | 回写时统一改 `μ`、补回引号 |
 | 导出的 PNG 被裁边 | 画布太密（几十支管）时只截可视区，`fitView` 没给 `minZoom`，被 React Flow 默认 0.5 夹住 | 已知缺陷，不是写错了；导出前先缩到能看全 |
+| 打包版启动后立刻退出，exit 0、无窗口、无任何输出 | 环境里有 `ELECTRON_RUN_AS_NODE=1`（调试残留会被子进程继承）→ Electron 当纯 Node 跑 main | 用 `env -u ELECTRON_RUN_AS_NODE ./LabFlow.exe` 启动，或先 `unset` 它；别据此判断"装坏了" |
 
 ## 八、和 Obsidian 配合
 
